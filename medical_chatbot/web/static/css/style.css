@@ -1,0 +1,352 @@
+:root {
+    --bg-dark: #0f1115;
+    --bg-panel: #181b21;
+    --primary: #4a90e2;
+    /* Medical Blue */
+    --accent: #50e3c2;
+    /* Success Green */
+    --urgent: #ff5b5b;
+    /* Alert Red */
+    --text-main: #ffffff;
+    --text-dim: #a0a4b0;
+    --border: #2d3038;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', sans-serif;
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.app-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 280px;
+    background-color: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.logo h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+.logo .dot {
+    color: var(--primary);
+}
+
+.logo p {
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+}
+
+.mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.mode-btn {
+    padding: 1rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.mode-btn:hover {
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+
+.mode-btn.active {
+    background: rgba(74, 144, 226, 0.1);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+.status-panel {
+    margin-top: auto;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.status-panel h4 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 0.8rem;
+}
+
+.status-item {
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-dim);
+}
+
+.indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.indicator.online {
+    background-color: var(--accent);
+    box-shadow: 0 0 5px var(--accent);
+}
+
+.indicator.warning {
+    background-color: #f5a623;
+}
+
+.clear-btn {
+    text-align: center;
+    color: var(--text-dim);
+    background: none;
+    border: none;
+    font-size: 0.8rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* Chat Interface */
+.chat-interface {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--bg-dark);
+}
+
+.chat-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--bg-dark);
+}
+
+.chat-header h3 {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 500;
+}
+
+.badge {
+    padding: 0.25rem 0.75rem;
+    background: #2d3038;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+}
+
+/* Context Toggle */
+.context-toggle {
+    padding: 1rem 2rem;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
+}
+
+.context-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-panel);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.context-btn:hover {
+    border-color: var(--primary);
+    color: var(--text-main);
+    transform: translateY(-2px);
+}
+
+.context-btn.active {
+    background: rgba(74, 144, 226, 0.15);
+    border-color: var(--primary);
+    color: var(--primary);
+    box-shadow: 0 0 15px rgba(74, 144, 226, 0.3);
+}
+
+.chat-history {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.message {
+    display: flex;
+    width: 100%;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+.message .bubble {
+    max-width: 70%;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.message.system .bubble {
+    background-color: var(--bg-panel);
+    color: var(--text-main);
+    border-bottom-left-radius: 2px;
+}
+
+.message.user .bubble {
+    background-color: var(--primary);
+    color: white;
+    border-bottom-right-radius: 2px;
+}
+
+/* Input Area */
+.input-area {
+    padding: 1.5rem 2rem;
+    background-color: var(--bg-dark);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.text-input-container {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    background-color: var(--bg-panel);
+    border-radius: 30px;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+}
+
+.text-input-container:focus-within {
+    border-color: var(--primary);
+}
+
+#user-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 0.8rem;
+    outline: none;
+}
+
+.action-btn {
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn:hover {
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
+.send-btn {
+    background-color: var(--primary);
+    border: none;
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.2s;
+}
+
+.send-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Markdown-like styling for system messages */
+.bubble p {
+    margin-bottom: 0.5rem;
+}
+
+.bubble strong {
+    color: var(--accent);
+}
+
+/* Image preview in chat */
+.chat-image {
+    max-width: 200px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+/* Analyzing message animation */
+.message.analyzing .bubble {
+    background: linear-gradient(90deg, var(--bg-panel) 0%, rgba(74, 144, 226, 0.1) 50%, var(--bg-panel) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border: 1px solid var(--primary);
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}

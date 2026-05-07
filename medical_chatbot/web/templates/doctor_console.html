@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBot - Doctor Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+    <style>
+        /* Report Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 24px;
+            width: 700px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .modal-header h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+        }
+        .modal-header-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .modal-close {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: white;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-download {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-download:hover {
+            background: #5b4eb8;
+            transform: translateY(-1px);
+        }
+        .btn-followup {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            border: 2px solid var(--primary);
+            background: white;
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-followup:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateY(-1px);
+        }
+        .modal-close:hover { background: #FFEDEC; color: #FF5B5B; }
+        .modal-body { padding: 2rem; position: relative; overflow: hidden; }
+
+        /* Follow-Up Panel */
+        .followup-panel {
+            position: absolute;
+            top: 0; right: -100%; width: 100%; height: 100%;
+            background: white;
+            padding: 2rem;
+            transition: right 0.35s ease;
+            overflow-y: auto;
+            z-index: 10;
+        }
+        .followup-panel.active { right: 0; }
+        .followup-panel h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            color: var(--primary);
+            margin-bottom: 1.2rem;
+        }
+        .fu-form-group {
+            margin-bottom: 1.2rem;
+        }
+        .fu-form-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 0.4rem;
+        }
+        .fu-form-group input,
+        .fu-form-group textarea,
+        .fu-form-group select {
+            width: 100%;
+            padding: 0.65rem 0.9rem;
+            border: 1.5px solid #E0E0E0;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        .fu-form-group input:focus,
+        .fu-form-group textarea:focus {
+            border-color: var(--primary);
+        }
+        .fu-form-group textarea { resize: vertical; min-height: 80px; }
+        .fu-med-list {
+            list-style: none;
+            padding: 0;
+            margin-top: 0.4rem;
+        }
+        .fu-med-list li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.8rem;
+            background: #F8F9FC;
+            border-radius: 8px;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+        }
+        .fu-med-list li button {
+            background: none;
+            border: none;
+            color: #FF5B5B;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .fu-add-row {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .fu-add-row input { flex: 1; }
+        .fu-add-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 10px;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .fu-actions {
+            display: flex;
+            gap: 0.8rem;
+            margin-top: 1.5rem;
+        }
+        .fu-actions .btn-save {
+            flex: 1;
+            padding: 0.7rem;
+            border-radius: 12px;
+            border: none;
+            background: #2E7D32;
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .fu-actions .btn-save:hover { background: #1B5E20; }
+        .fu-actions .btn-cancel {
+            flex: 1;
+            padding: 0.7rem;
+            border-radius: 12px;
+            border: 1.5px solid #E0E0E0;
+            background: white;
+            color: #666;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .fu-actions .btn-cancel:hover { background: #F5F5F5; }
+        .fu-success {
+            display: none;
+            text-align: center;
+            padding: 1.5rem;
+            color: #2E7D32;
+            font-weight: 600;
+        }
+        .fu-success.show { display: block; }
+
+        /* Report Sections */
+        .report-section {
+            margin-bottom: 1.5rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid #F0F2F5;
+        }
+        .report-section:last-child { border-bottom: none; }
+        .report-section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary);
+            font-weight: 700;
+            margin-bottom: 0.8rem;
+        }
+        .report-row {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 0.4rem;
+        }
+        .report-label {
+            min-width: 140px;
+            color: var(--text-dim);
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .report-value {
+            color: var(--text-main);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .report-value.danger { color: #FF5B5B; }
+        .report-value.success { color: #2E7D32; }
+        .report-value.warning { color: #E65100; }
+
+        .symptom-tag {
+            display: inline-block;
+            padding: 0.25rem 0.7rem;
+            background: #EAE8FF;
+            color: var(--primary);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0.2rem 0.3rem 0.2rem 0;
+        }
+        .chat-line {
+            padding: 0.4rem 0;
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        .chat-line .role {
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+        }
+        .chat-line .role.patient { color: var(--primary); }
+        .chat-line .role.system { color: var(--text-dim); }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo"><h1>MediBot</h1></div>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item"><span class="icon">⊞</span> Dashboard</a>
+                <a href="/chat" class="nav-item"><span class="icon">💬</span> Patient Chat</a>
+                <a href="/doctor" class="nav-item active"><span class="icon">🩺</span> Doctor Console</a>
+                <a href="/followup" class="nav-item"><span class="icon">📋</span> Follow-Up</a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="console-header">
+                <div>
+                    <h2>Clinical Console</h2>
+                    <p class="subtitle">Review patient reports and AI-assisted diagnoses.</p>
+                </div>
+                <div class="search-container">
+                    <div class="search-bar">
+                        <span>🔍</span>
+                        <input type="text" placeholder="Search patient ID or diagnosis...">
+                    </div>
+                </div>
+            </header>
+
+            <!-- Reports Grid -->
+            <section class="reports-grid">
+                {% if sessions %}
+                {% for uid, data in sessions.items() %}
+                <div class="report-card">
+                    <div class="card-top">
+                        <div class="card-title-group">
+                            <div class="file-icon">📄</div>
+                            <div>
+                                <h3 class="report-title">
+                                    {% if data.session.context.tumor_class %}
+                                    {{ data.session.context.tumor_class }}
+                                    {% else %}
+                                    Pending Diagnosis
+                                    {% endif %}
+                                </h3>
+                                <p class="report-subtitle">
+                                    (Confidence: {{ "%.0f"|format(data.session.context.tumor_confidence * 100) }}%)
+                                </p>
+                            </div>
+                        </div>
+                        {% if data.session.context.risk_level != "Unknown" %}
+                        <span class="risk-badge {{ 'risk-high' if data.session.context.risk_level == 'High' else 'risk-low' }}">
+                            {{ data.session.context.risk_level }} RISK
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <div class="card-meta">
+                        <div class="meta-item"><span>📅</span> {{ data.session.start_time | int }}</div>
+                        <div class="meta-item"><span>ID:</span> {{ uid[:8] }}</div>
+                        <div class="meta-item"><span>🏥</span> {{ data.session.context.get('medical_context', 'N/A') | capitalize }}</div>
+                    </div>
+
+                    <p class="report-summary">
+                        {% if data.session.context.extracted_entities.symptoms %}
+                        User reported: {{ ", ".join(data.session.context.extracted_entities.symptoms[:5]) }}
+                        {% else %}
+                        No symptoms reported yet.
+                        {% endif %}
+                    </p>
+
+                    <div class="card-actions">
+                        <button class="btn-outline view-report-btn" data-uid="{{ uid }}">
+                            View Clinical Report
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="report-card">
+                    <div class="card-top">
+                        <div class="card-title-group">
+                            <div class="file-icon">ℹ️</div>
+                            <div>
+                                <h3 class="report-title">No Active Sessions</h3>
+                                <p class="report-subtitle">Start a patient chat to see reports here.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+
+    <!-- Report Modal -->
+    <div class="modal-overlay" id="report-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>📋 Clinical Report</h2>
+                <div class="modal-header-actions">
+                    <button class="btn-followup" id="followup-btn" onclick="openFollowUp()">📝 Follow Up</button>
+                    <button class="btn-download" id="download-btn" onclick="downloadReport()">📥 Download</button>
+                    <button class="modal-close" onclick="closeModal()">✕</button>
+                </div>
+            </div>
+            <div class="modal-body" id="report-body">
+                <div id="report-content">
+                    <!-- Populated by JS -->
+                </div>
+                <!-- Follow-Up Panel (slides in from right) -->
+                <div class="followup-panel" id="followup-panel">
+                    <h3>📝 Follow-Up Plan</h3>
+                    <div class="fu-form-group">
+                        <label>Medications</label>
+                        <div class="fu-add-row">
+                            <input type="text" id="fu-med-input" placeholder="e.g. Ibuprofen 400mg - 3x daily">
+                            <button class="fu-add-btn" onclick="addMedication()">+ Add</button>
+                        </div>
+                        <ul class="fu-med-list" id="fu-med-list"></ul>
+                    </div>
+                    <div class="fu-form-group">
+                        <label>Next MRI / Scan Appointment</label>
+                        <input type="date" id="fu-next-scan">
+                    </div>
+                    <div class="fu-form-group">
+                        <label>Follow-Up Visit Date</label>
+                        <input type="date" id="fu-visit-date">
+                    </div>
+                    <div class="fu-form-group">
+                        <label>Lab Tests Required</label>
+                        <input type="text" id="fu-lab-tests" placeholder="e.g. CBC, CT Scan, MRI Brain">
+                    </div>
+                    <div class="fu-form-group">
+                        <label>Doctor Notes / Treatment Plan</label>
+                        <textarea id="fu-notes" placeholder="Write your clinical notes, treatment plan, and recommendations here..."></textarea>
+                    </div>
+                    <div class="fu-success" id="fu-success">✅ Follow-up plan saved successfully!</div>
+                    <div class="fu-actions">
+                        <button class="btn-cancel" onclick="closeFollowUp()">← Back</button>
+                        <button class="btn-save" onclick="saveFollowUp()">💾 Save Plan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function closeModal() {
+            document.getElementById('report-modal').classList.remove('active');
+        }
+        // Close on overlay click
+        document.getElementById('report-modal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        document.querySelectorAll('.view-report-btn').forEach(btn => {
+            btn.addEventListener('click', async function () {
+                const uid = this.getAttribute('data-uid');
+                currentUid = uid;
+                const body = document.getElementById('report-content');
+                body.innerHTML = '<p style="text-align:center;padding:2rem;color:var(--text-dim)">⏳ Generating report...</p>';
+                document.getElementById('report-modal').classList.add('active');
+
+                try {
+                    const res = await fetch('/api/doctor/report/' + uid);
+                    const data = await res.json();
+
+                    if (data.error) {
+                        body.innerHTML = `<p style="color:var(--danger)">${data.error}</p>`;
+                        return;
+                    }
+
+                    const r = data.report;
+                    const riskClass = r.risk_level === 'High' ? 'danger' : r.risk_level === 'Medium' ? 'warning' : 'success';
+
+                    // Pre-fill Follow-up Form
+                    prefillFollowUp(r.followup_plan);
+
+                    let symptomsHtml = '';
+                    if (r.symptoms && r.symptoms.length) {
+                        symptomsHtml = r.symptoms.map(s => `<span class="symptom-tag">${s}</span>`).join('');
+                    } else {
+                        symptomsHtml = '<span style="color:var(--text-dim)">None reported</span>';
+                    }
+
+                    let clinicalHtml = '';
+                    if (r.clinical_symptoms && r.clinical_symptoms.length) {
+                        clinicalHtml = r.clinical_symptoms.map(s => `<span class="symptom-tag">${s}</span>`).join('');
+                    } else {
+                        clinicalHtml = '<span style="color:var(--text-dim)">N/A</span>';
+                    }
+
+                    let chatHtml = '';
+                    if (r.conversation && r.conversation.length) {
+                        chatHtml = r.conversation.map(m =>
+                            `<div class="chat-line"><span class="role ${m.role}">${m.role}:</span>${m.content}</div>`
+                        ).join('');
+                    } else {
+                        chatHtml = '<span style="color:var(--text-dim)">No conversation recorded.</span>';
+                    }
+
+                    let qaHtml = '';
+                    if (r.question_answers && Object.keys(r.question_answers).length > 0) {
+                        qaHtml = Object.entries(r.question_answers).map(([q, a]) =>
+                            `<div class="report-row" style="flex-direction:column;gap:0.2rem;margin-bottom:1rem;">
+                                <span class="report-label" style="width:100%;color:var(--primary)">Q: ${q}</span>
+                                <span class="report-value" style="background:#F8F9FC;padding:0.6rem;border-radius:8px;">A: ${a}</span>
+                             </div>`
+                        ).join('');
+                    } else {
+                        qaHtml = '<span style="color:var(--text-dim)">No follow-up questions answered.</span>';
+                    }
+
+                    let weightLoss = 'Not specified';
+                    if (r.question_answers) {
+                        for (const [q, a] of Object.entries(r.question_answers)) {
+                            if (q.toLowerCase().includes('weight loss')) {
+                                weightLoss = a;
+                                break;
+                            }
+                        }
+                    }
+
+                    body.innerHTML = `
+                        <div class="report-section">
+                            <div class="report-section-title">Patient Information</div>
+                            <div class="report-row"><span class="report-label">Patient ID</span><span class="report-value">${r.patient_id}</span></div>
+                            <div class="report-row"><span class="report-label">Session ID</span><span class="report-value">${r.session_id.substring(0,12)}...</span></div>
+                            <div class="report-row"><span class="report-label">Medical Area</span><span class="report-value">${(r.medical_context || 'Not specified').toUpperCase()}</span></div>
+                            <div class="report-row"><span class="report-label">Report Date</span><span class="report-value">${r.date}</span></div>
+                        </div>
+
+                        <div class="report-section">
+                            <div class="report-section-title">Chief Complaint</div>
+                            <div class="report-row"><span class="report-label">Symptoms</span><div>${clinicalHtml}</div></div>
+                            <div class="report-row"><span class="report-label">Weight Loss</span><span class="report-value">${weightLoss}</span></div>
+                            <div class="report-row"><span class="report-label">Duration</span><span class="report-value">${r.duration || 'Not specified'}</span></div>
+                        </div>
+
+                        <div class="report-section">
+                            <div class="report-section-title">Follow-Up Answers</div>
+                            ${qaHtml}
+                        </div>
+
+                        <div class="report-section">
+                            <div class="report-section-title">Imaging Findings</div>
+                            <div class="report-row"><span class="report-label">Scan Status</span><span class="report-value">${r.image_uploaded ? '✅ Uploaded' : '❌ No scan uploaded'}</span></div>
+                            <div class="report-row"><span class="report-label">Diagnosis</span><span class="report-value">${r.diagnosis || 'Pending'}</span></div>
+                            <div class="report-row"><span class="report-label">Confidence</span><span class="report-value">${r.confidence}%</span></div>
+                        </div>
+
+                        <div class="report-section">
+                            <div class="report-section-title">Assessment</div>
+                            <div class="report-row"><span class="report-label">Risk Level</span><span class="report-value ${riskClass}">${r.risk_level.toUpperCase()}</span></div>
+                            <div class="report-row"><span class="report-label">Recommendation</span><span class="report-value">${r.recommendation}</span></div>
+                        </div>
+
+                        <div class="report-section">
+                            <div class="report-section-title">Conversation History</div>
+                            <div style="max-height:200px;overflow-y:auto;padding:0.5rem;background:#F8F9FC;border-radius:12px">${chatHtml}</div>
+                        </div>
+                    `;
+                } catch(err) {
+                    body.innerHTML = `<p style="color:var(--danger)">Error loading report: ${err.message}</p>`;
+                }
+            });
+        });
+        // ---- DOWNLOAD REPORT ----
+        function downloadReport() {
+            const body = document.getElementById('report-content');
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Clinical Report - MediBot</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap" rel="stylesheet">
+                    <style>
+                        * { margin: 0; padding: 0; box-sizing: border-box; }
+                        body { font-family: 'Inter', sans-serif; padding: 50px; color: #1a1a2e; background: #fff; }
+
+                        .report-header { text-align: center; margin-bottom: 35px; padding-bottom: 20px; border-bottom: 3px solid #6C5DD3; }
+                        .report-header h1 { font-family: 'Outfit', sans-serif; font-size: 22px; color: #6C5DD3; margin-bottom: 4px; }
+                        .report-header p { color: #888; font-size: 13px; }
+
+                        .report-section { margin-bottom: 28px; padding-bottom: 22px; border-bottom: 1px solid #E8E8EE; }
+                        .report-section:last-child { border-bottom: none; }
+
+                        .report-section-title {
+                            font-family: 'Outfit', sans-serif;
+                            font-size: 12px;
+                            text-transform: uppercase;
+                            letter-spacing: 1.5px;
+                            color: #6C5DD3;
+                            font-weight: 700;
+                            margin-bottom: 14px;
+                            padding-bottom: 6px;
+                            border-bottom: 2px solid #EAE8FF;
+                        }
+
+                        .report-row {
+                            display: flex;
+                            gap: 14px;
+                            margin-bottom: 8px;
+                            align-items: flex-start;
+                        }
+                        .report-label {
+                            min-width: 150px;
+                            color: #777;
+                            font-weight: 500;
+                            font-size: 13px;
+                        }
+                        .report-value {
+                            color: #1a1a2e;
+                            font-weight: 600;
+                            font-size: 13px;
+                        }
+                        .report-value.danger { color: #E53935; }
+                        .report-value.success { color: #2E7D32; }
+                        .report-value.warning { color: #E65100; }
+
+                        .symptom-tag {
+                            display: inline-block;
+                            padding: 4px 12px;
+                            background: #EAE8FF;
+                            color: #6C5DD3;
+                            border-radius: 20px;
+                            font-size: 11px;
+                            font-weight: 600;
+                            margin: 3px 4px 3px 0;
+                        }
+
+                        .chat-line { padding: 4px 0; font-size: 12px; line-height: 1.6; }
+                        .chat-line .role { font-weight: 700; text-transform: uppercase; font-size: 10px; margin-right: 6px; }
+                        .chat-line .role.patient { color: #6C5DD3; }
+                        .chat-line .role.system { color: #888; }
+
+                        .report-footer {
+                            margin-top: 40px;
+                            text-align: center;
+                            color: #aaa;
+                            font-size: 11px;
+                            border-top: 1px solid #E8E8EE;
+                            padding-top: 15px;
+                        }
+
+                        @media print {
+                            body { padding: 30px; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="report-header">
+                        <h1>MediBot Clinical Report</h1>
+                        <p>AI-Assisted Medical Consultation Report</p>
+                    </div>
+                    ${body.innerHTML}
+                    <div class="report-footer">
+                        <p>Generated by MediBot AI Medical Assistant &mdash; This report is for reference only. Consult a licensed physician for diagnosis.</p>
+                    </div>
+                    <script>window.onload = function() { window.print(); }<\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+        }
+
+        // ---- FOLLOW-UP LOGIC ----
+        let currentUid = null;
+
+        function openFollowUp() {
+            document.getElementById('followup-panel').classList.add('active');
+            document.getElementById('fu-success').classList.remove('show');
+        }
+
+        function closeFollowUp() {
+            document.getElementById('followup-panel').classList.remove('active');
+        }
+
+        // Global meds array
+        let meds = [];
+
+        // Pre-fill the follow-up form when loading a report
+        function prefillFollowUp(plan) {
+            meds = plan && plan.medications ? plan.medications : [];
+            document.getElementById('fu-next-scan').value = plan ? plan.next_scan : '';
+            document.getElementById('fu-visit-date').value = plan ? plan.visit_date : '';
+            document.getElementById('fu-lab-tests').value = plan ? plan.lab_tests : '';
+            document.getElementById('fu-notes').value = plan ? plan.notes : '';
+            renderMeds();
+        }
+
+        function addMedication() {
+            const input = document.getElementById('fu-med-input');
+            const med = input.value.trim();
+            if(med) {
+                meds.push(med);
+                input.value = '';
+                renderMeds();
+            }
+        }
+
+        function removeMedication(idx) {
+            meds.splice(idx, 1);
+            renderMeds();
+        }
+
+        function renderMeds() {
+            const list = document.getElementById('fu-med-list');
+            list.innerHTML = meds.map((m, i) => 
+                `<li><span>${m}</span><button onclick="removeMedication(${i})">✕</button></li>`
+            ).join('');
+        }
+
+        async function saveFollowUp() {
+            if(!currentUid) return;
+            
+            const nextScan = document.getElementById('fu-next-scan').value;
+            const visitDate = document.getElementById('fu-visit-date').value;
+            const labTests = document.getElementById('fu-lab-tests').value;
+            const notes = document.getElementById('fu-notes').value;
+
+            const payload = {
+                uid: currentUid,
+                medications: meds,
+                nextScan,
+                visitDate,
+                labTests,
+                notes
+            };
+
+            try {
+                const res = await fetch('/api/doctor/followup/save', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                if(res.ok) {
+                    document.getElementById('fu-success').classList.add('show');
+                    setTimeout(closeFollowUp, 2000);
+                }
+            } catch(err) {
+                alert("Failed to save follow up plan");
+            }
+        }
+    </script>
+</body>
+</html>

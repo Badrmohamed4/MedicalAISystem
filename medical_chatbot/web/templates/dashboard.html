@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBot - Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>MediBot</h1>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item active">
+                    <span class="icon">⊞</span>
+                    Dashboard
+                </a>
+                <a href="/chat" class="nav-item">
+                    <span class="icon">💬</span>
+                    Patient Chat
+                </a>
+                <a href="/doctor" class="nav-item">
+                    <span class="icon">🩺</span>
+                    Doctor Console
+                </a>
+                <a href="/followup" class="nav-item">
+                    <span class="icon">📋</span>
+                    Follow-Up
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div>
+                    <h2>System Dashboard</h2>
+                    <p class="subtitle">Real-time overview of medical analysis systems and user activity.</p>
+                </div>
+            </header>
+
+            <!-- Stats Grid -->
+            <section class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Active Users</span>
+                    </div>
+                    <div class="stat-value" id="active-users">0</div>
+
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Total Sessions</span>
+                    </div>
+                    <div class="stat-value" id="total-sessions">0</div>
+
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Brain Analyses</span>
+                    </div>
+                    <div class="stat-value" id="brain-scans">0</div>
+                    <div class="stat-desc">MRI Scans processed</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <span class="stat-title">Lung Analyses</span>
+                    </div>
+                    <div class="stat-value" id="lung-scans">0</div>
+                    <div class="stat-desc">CT Scans processed</div>
+                </div>
+            </section>
+
+            <!-- Large Navigation Cards -->
+            <section class="action-grid">
+                <div class="action-card">
+                    <div class="action-header">
+                        <div class="action-icon-wrapper patient-icon">
+                            <span class="action-icon">⚡</span>
+                        </div>
+                        <h3>Patient Bot</h3>
+                    </div>
+                    <div class="action-content">
+                        <p class="section-desc">Start a new triage session or analyze medical images.</p>
+                        <p class="section-detail">Access the AI-powered symptom checker and image analysis tools for
+                            Brain MRI and Lung CT scans.</p>
+                        <div class="btn-group">
+                            <a href="/chat" class="btn btn-secondary">Symptom Check</a>
+                            <a href="/chat" class="btn btn-secondary">Image Analysis</a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-card">
+                    <div class="action-header">
+                        <div class="action-icon-wrapper doctor-icon">
+                            <span class="action-icon">✓</span>
+                        </div>
+                        <h3>Doctor Reports</h3>
+                    </div>
+                    <div class="action-content">
+                        <p class="section-desc">Review clinical reports and patient histories.</p>
+                        <p class="section-detail">Detailed clinical dashboard for reviewing AI-generated diagnostic
+                            reports, risk assessments, and imaging results.</p>
+                        <div class="btn-group">
+                            <a href="/doctor" class="btn btn-secondary">Clinical Reports</a>
+                            <a href="/doctor" class="btn btn-secondary">Patient History</a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Re-use dashboard.js (we will need to update it to support new IDs if changed, but I kept IDs same for stats) -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+
+</html>

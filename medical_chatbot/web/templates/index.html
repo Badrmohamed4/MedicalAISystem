@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedBot - Patient Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>MediBot</h1>
+            </div>
+
+            <nav class="sidebar-nav">
+                <a href="#" onclick="clearSession()" class="nav-item new-chat-btn">
+                    <span class="icon">🔄</span>
+                    New Chat
+                </a>
+                <a href="/" class="nav-item">
+                    <span class="icon">⊞</span>
+                    Dashboard
+                </a>
+                <a href="/chat" class="nav-item active">
+                    <span class="icon">💬</span>
+                    Patient Chat
+                </a>
+                <a href="/doctor" class="nav-item">
+                    <span class="icon">🩺</span>
+                    Doctor Console
+                </a>
+                <a href="/followup" class="nav-item">
+                    <span class="icon">📋</span>
+                    Follow-Up
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="chat-container">
+                <header class="chat-header">
+                    <div class="chat-title">
+                        <h2>Patient Assistant</h2>
+                    </div>
+                </header>
+
+                <!-- Context Toggle -->
+                <div class="context-toggle">
+                    <button id="btn-brain" class="context-btn" onclick="setContext('brain')">
+                        <span class="icon">🧠</span> Brain
+                    </button>
+                    <button id="btn-lung" class="context-btn" onclick="setContext('lung')">
+                        <span class="icon">🫁</span> Lung
+                    </button>
+                    <button id="btn-skin" class="context-btn" onclick="setContext('skin')">
+                        <span class="icon">🦠</span> Skin
+                    </button>
+                </div>
+
+                <div id="chat-history" class="chat-history">
+                    <!-- Messages will be loaded here -->
+                </div>
+
+                <div class="input-area">
+                    <div class="upload-container">
+                        <input type="file" id="image-upload" accept="image/*" hidden>
+                        <button class="upload-btn" onclick="document.getElementById('image-upload').click()"
+                            title="Upload Scan">
+                            📷
+                        </button>
+                    </div>
+                    <div class="text-input-wrapper">
+                        <input type="text" id="user-input" placeholder="Type your symptoms here..." autocomplete="off">
+                    </div>
+                    <button class="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+
+</html>
