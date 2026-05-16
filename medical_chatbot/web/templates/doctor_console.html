@@ -94,6 +94,30 @@
             color: white;
             transform: translateY(-1px);
         }
+        .btn-scans {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.5rem 1rem;
+            border-radius: 12px;
+            border: 2px solid #2196F3;
+            background: white;
+            color: #2196F3;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-scans:hover {
+            background: #2196F3;
+            color: white;
+            transform: translateY(-1px);
+        }
+        .btn-scans:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
         .modal-close:hover { background: #FFEDEC; color: #FF5B5B; }
         .modal-body { padding: 2rem; position: relative; overflow: hidden; }
 
@@ -382,6 +406,7 @@
             <div class="modal-header">
                 <h2>📋 Clinical Report</h2>
                 <div class="modal-header-actions">
+                    <button class="btn-scans" id="scans-btn" onclick="openScans()" disabled>🔬 Scans</button>
                     <button class="btn-followup" id="followup-btn" onclick="openFollowUp()">📝 Follow Up</button>
                     <button class="btn-download" id="download-btn" onclick="downloadReport()">📥 Download</button>
                     <button class="modal-close" onclick="closeModal()">✕</button>
@@ -424,6 +449,16 @@
                         <button class="btn-save" onclick="saveFollowUp()">💾 Save Plan</button>
                     </div>
                 </div>
+                <!-- Scans Panel (slides in from right) -->
+                <div class="followup-panel" id="scans-panel">
+                    <h3>🔬 Patient Scan Images</h3>
+                    <div id="scans-container" style="text-align:center;padding:1rem 0;">
+                        <p style="color:var(--text-dim)">No scans available.</p>
+                    </div>
+                    <div class="fu-actions">
+                        <button class="btn-cancel" onclick="closeScans()">← Back</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -459,6 +494,16 @@
 
                     // Pre-fill Follow-up Form
                     prefillFollowUp(r.followup_plan);
+
+                    // Enable/disable Scans button based on whether an image was uploaded
+                    const scansBtn = document.getElementById('scans-btn');
+                    if (r.image_path) {
+                        scansBtn.disabled = false;
+                        scansBtn.setAttribute('data-img', '/uploads/' + r.image_path);
+                    } else {
+                        scansBtn.disabled = true;
+                        scansBtn.removeAttribute('data-img');
+                    }
 
                     let symptomsHtml = '';
                     if (r.symptoms && r.symptoms.length) {
@@ -659,6 +704,25 @@
 
         function closeFollowUp() {
             document.getElementById('followup-panel').classList.remove('active');
+        }
+
+        function openScans() {
+            const btn = document.getElementById('scans-btn');
+            const imgSrc = btn.getAttribute('data-img');
+            const container = document.getElementById('scans-container');
+            if (imgSrc) {
+                container.innerHTML = `
+                    <img src="${imgSrc}" alt="Patient Scan" style="max-width:100%;max-height:500px;border-radius:12px;border:2px solid #E0E0E0;margin-bottom:1rem;">
+                    <p style="font-size:0.85rem;color:var(--text-dim);margin-top:0.5rem;">Uploaded medical scan image</p>
+                `;
+            } else {
+                container.innerHTML = '<p style="color:var(--text-dim)">No scans available for this patient.</p>';
+            }
+            document.getElementById('scans-panel').classList.add('active');
+        }
+
+        function closeScans() {
+            document.getElementById('scans-panel').classList.remove('active');
         }
 
         // Global meds array

@@ -43,28 +43,73 @@ class PatientAgent:
         # This prevents the AI from extracting "cough" if the patient says "when I cough"
         # in response to a question that had nothing to do with coughing.
         if not last_q:
-            self.session.update_context("extracted_entities", entities)
+            # IMPORTANT: If this is an image upload (empty text), do NOT overwrite
+            # the already-accumulated entities and medical context.
+            if text.strip():
+                self.session.update_context("extracted_entities", entities)
 
-            # AI-driven medical context detection
-            ai_context = entities.get("medical_context", "none")
-            if ai_context in ["brain", "lung", "skin"]:
-                self.session.update_context("medical_context", ai_context)
+                # AI-driven medical context detection
+                ai_context = entities.get("medical_context", "none")
+                if ai_context in ["brain", "lung", "skin"]:
+                    self.session.update_context("medical_context", ai_context)
+            elif not image_path:
+                # Only overwrite if it's a non-image, non-empty scenario
+                self.session.update_context("extracted_entities", entities)
         else:
             # We ARE answering a question. Save the exact answer for the doctor's report.
             q_answers = self.session.context.get("question_answers", {})
             q_answers[last_q] = text
             self.session.update_context("question_answers", q_answers)
+
+            # If this is the final "anything else?" prompt, the patient may describe
+            # entirely NEW symptoms. Run NLP extraction and merge new symptoms in.
+            is_final_answer = self.session.context.get("asked_final_prompt", False)
+            if is_final_answer:
+                new_symptoms = entities.get("symptoms", [])
+                current_ents = self.session.context["extracted_entities"]
+                for s in new_symptoms:
+                    if s not in current_ents["symptoms"]:
+                        current_ents["symptoms"].append(s)
+
+                # Also catch common free-text symptom keywords the NLP might miss
+                FREE_TEXT_SYMPTOMS = {
+                    "cold": "chills / feeling cold",
+                    "chill": "chills / feeling cold",
+                    "shiver": "shivering",
+                    "fever": "fever",
+                    "tired": "fatigue",
+                    "fatigue": "fatigue",
+                    "weak": "weakness",
+                    "sweat": "excessive sweating",
+                    "numb": "numbness",
+                    "tingling": "tingling",
+                    "appetite": "loss of appetite",
+                    "sleep": "sleep disturbance",
+                    "insomnia": "insomnia",
+                    "anxious": "anxiety",
+                    "depressed": "depression",
+                    "palpitation": "palpitations",
+                    "heart racing": "palpitations",
+                    "bloat": "bloating",
+                    "constipat": "constipation",
+                    "diarr": "diarrhea",
+                }
+                text_lower_final = text.lower()
+                for keyword, symptom_label in FREE_TEXT_SYMPTOMS.items():
+                    if keyword in text_lower_final:
+                        if symptom_label not in current_ents["symptoms"]:
+                            current_ents["symptoms"].append(symptom_label)
             
             # Parse severity and duration directly from the answer text
             current_ents = self.session.context["extracted_entities"]
             
             # Severity: check if the answer contains severity keywords
             text_lower = text.lower()
-            if any(w in text_lower for w in ["sharp", "severe", "extreme", "worst", "intense"]):
+            if any(w in text_lower for w in ["sharp", "stabbing", "severe", "extreme", "worst", "intense"]):
                 current_ents["severity"] = "severe"
-            elif any(w in text_lower for w in ["throbbing", "moderate", "dull"]):
+            elif any(w in text_lower for w in ["throbbing", "moderate", "dull", "pressure", "heavy"]):
                 current_ents["severity"] = "moderate"
-            elif any(w in text_lower for w in ["mild", "slight", "minor"]):
+            elif any(w in text_lower for w in ["mild", "slight", "minor", "light"]):
                 current_ents["severity"] = "mild"
             elif entities.get("severity"):
                 current_ents["severity"] = entities["severity"]
@@ -76,6 +121,54 @@ class PatientAgent:
                 current_ents["duration"] = duration_match.group(0)
             elif entities.get("duration"):
                 current_ents["duration"] = entities["duration"]
+
+            # --- Enrich symptoms from follow-up answers ---
+            # When the patient confirms something in a follow-up answer,
+            # add the relevant clinical finding to the symptoms list.
+            last_q_lower = last_q.lower()
+            is_positive = any(w in text_lower for w in ["yes", "yeah", "yep", "correct", "true", "i do", "i have"])
+
+            if is_positive:
+                ANSWER_SYMPTOM_MAP = {
+                    "weight loss": "unintentional weight loss",
+                    "cough": "aggravated by cough",
+                    "deep breath": "aggravated by deep breathing",
+                    "blood": "coughing blood",
+                    "shoulder": "pain radiating to shoulder",
+                    "back": "pain radiating to back",
+                    "respiratory infection": "recent respiratory infection",
+                    "seizure": "seizures",
+                    "nausea": "nausea",
+                    "vomit": "vomiting",
+                    "vision": "vision changes",
+                    "smoke": "smoking history",
+                    "fever": "fever",
+                    "spreading": "spreading lesion",
+                    "itchy": "pruritus",
+                    "worse in the morning": "worse in morning",
+                    "swelling": "swelling",
+                    "wheezing": "wheezing",
+                    "consciousness": "loss of consciousness",
+                }
+                for keyword, symptom_label in ANSWER_SYMPTOM_MAP.items():
+                    if keyword in last_q_lower or keyword in text_lower:
+                        if symptom_label not in current_ents["symptoms"]:
+                            current_ents["symptoms"].append(symptom_label)
+
+            # Also check if the answer itself contains a direct symptom mention
+            # e.g. patient says "shoulder" when asked about radiating pain
+            DIRECT_ANSWER_MAP = {
+                "stabbing": "stabbing pain",
+                "sharp": "sharp pain",
+                "pressure": "heavy pressure",
+                "shoulder": "pain radiating to shoulder",
+                "back": "pain radiating to back",
+                "both": None,  # not a symptom on its own
+            }
+            for keyword, symptom_label in DIRECT_ANSWER_MAP.items():
+                if keyword in text_lower and symptom_label:
+                    if symptom_label not in current_ents["symptoms"]:
+                        current_ents["symptoms"].append(symptom_label)
 
         current_context = self.session.context.get("medical_context")
 
@@ -120,8 +213,15 @@ class PatientAgent:
             self.session.update_context("last_asked_question", next_q)
             response = f"Understood. {next_q}"
         else:
-            # All questions exhausted → give preliminary assessment
-            response = self._generate_assessment()
+            # Before giving assessment, ask if the patient has anything else to add
+            if not self.session.context.get("asked_final_prompt"):
+                self.session.update_context("asked_final_prompt", True)
+                final_q = "Before I provide my assessment — is there anything else you would like to tell me about your condition?"
+                self.session.update_context("last_asked_question", final_q)
+                response = f"Thank you for your answers. {final_q}"
+            else:
+                # All questions exhausted AND final prompt answered → give assessment
+                response = self._generate_assessment()
 
         self.session.add_message("system", response)
         return response
@@ -261,8 +361,7 @@ class PatientAgent:
         response = "📋 **Preliminary Assessment**\n\n"
         response += f"**Symptoms recorded**: {symptoms_str}\n"
         response += f"**Medical area**: {context}\n"
-        if severity:
-            response += f"**Severity**: {severity}\n"
+        response += f"**Severity**: {severity or 'Not determined'}\n"
         response += f"**Risk level**: {risk}\n\n"
         response += risk_msg
         response += "\n\nFor a more accurate diagnosis, please upload a medical scan using the 📷 button."

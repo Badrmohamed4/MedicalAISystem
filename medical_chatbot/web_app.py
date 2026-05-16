@@ -1,7 +1,7 @@
 import os
 import sys
 import uuid
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
 
 # Ensure project root is in path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,6 +66,10 @@ def chat():
         response_text = state["doctor_bot"].process_query(user_input)
         
     return jsonify({"response": response_text, "mode": state["mode"]})
+
+@app.route('/uploads/<filename>')
+def serve_upload(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
@@ -233,6 +237,7 @@ def get_doctor_report(uid):
         "severity": entities.get("severity"),
         "duration": entities.get("duration"),
         "image_uploaded": ctx.get("image_uploaded", False),
+        "image_path": os.path.basename(ctx.get("image_path", "")) if ctx.get("image_path") else None,
         "diagnosis": ctx.get("tumor_class"),
         "confidence": round(ctx.get("tumor_confidence", 0) * 100, 1),
         "risk_level": risk,
