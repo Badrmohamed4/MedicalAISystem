@@ -15,6 +15,14 @@ try:
 except Exception as e:
     print(f"[Agent] ⚠️ Ollama unavailable for responses: {e}")
 
+# LangGraph pipeline
+_langgraph_pipeline = None
+try:
+    from medical_ai_project.pipeline.langgraph_pipeline import run_pipeline as _run_pipeline
+    _langgraph_pipeline = _run_pipeline
+    print("[Agent] ✅ LangGraph pipeline loaded.")
+except Exception as e:
+    print(f"[Agent] ⚠️ LangGraph pipeline unavailable: {e}")
 
 class PatientAgent:
     def __init__(self, session):
@@ -29,6 +37,19 @@ class PatientAgent:
     # ------------------------------------------------------------------ #
     def process_input(self, text, image_path=None):
         self.session.add_message("patient", text)
+
+	 # ---------- 0. Urgency Check (always first, no LLM) ----------
+        if text and self._is_urgent(text):
+            urgent_response = (
+                "⚠️ This sounds like a medical emergency. "
+                "Please call emergency services (123) immediately "
+                "or go to the nearest emergency room. "
+                "Do not wait — seek help now."
+            )
+            self.session.update_context("risk_level", "High")
+            self.session.add_message("system", urgent_response)
+            return urgent_response
+
 
         # ---------- 1. NLP Extraction (BioBERT + Ollama) ----------
         intent = self.intent_clf.predict(text)
@@ -308,6 +329,22 @@ class PatientAgent:
         if scores[best] > 0:
             return best
         return None
+	
+    # ------------------------------------------------------------------ #
+    #       URGENCY DETECTION (no LLM — deterministic)                   #
+    # ------------------------------------------------------------------ #
+    URGENCY_KEYWORDS = [
+        "can't breathe", "cannot breathe", "cant breathe",
+        "can't breathe", "chest pain", "heart attack",
+        "stroke", "unconscious", "seizure", "bleeding heavily",
+        "severe pain", "emergency", "dying", "collapsed",
+        "overdose", "suicidal", "can not breathe",
+    ]
+
+    def _is_urgent(self, text):
+        """Deterministic urgency check. No LLM. Always runs first."""
+        text_lower = text.lower()
+        return any(kw in text_lower for kw in self.URGENCY_KEYWORDS)
 
     # ------------------------------------------------------------------ #
     #  FOLLOW-UP QUESTION FINDER                                           #
@@ -372,7 +409,40 @@ class PatientAgent:
     #  OLLAMA RESPONSE GENERATION                                          #
     # ------------------------------------------------------------------ #
     def _ask_with_ollama(self, user_text):
-        """Use Ollama LLM to generate a contextual medical response."""
+        """
+        Use LangGraph pipeline for general inputs.
+        Falls back to direct Ollama if pipeline unavailable.
+        Also updates session context with pipeline results.
+        """
+        # --- Try LangGraph pipeline first ---
+        if _langgraph_pipeline:
+            try:
+                session_ctx = {
+                    "last_response": self.session.history[-1]["content"] if self.session.history else "",
+                    "medical_context": self.session.context.get("medical_context", "none"),
+                    "symptoms": self.session.context["extracted_entities"].get("symptoms", []),
+                }
+                result = _langgraph_pipeline(user_text, session_context=session_ctx)
+
+                # Update session context with pipeline findings
+                if result.get("symptoms"):
+                    existing = self.session.context["extracted_entities"]["symptoms"]
+                    for s in result["symptoms"]:
+                        if s not in existing:
+                            existing.append(s)
+
+                if result.get("medical_context") and result["medical_context"] != "none":
+                    self.session.update_context("medical_context", result["medical_context"])
+
+                if result.get("risk_level"):
+                    self.session.update_context("risk_level", result["risk_level"])
+
+                return result.get("response", "Could you describe your symptoms in more detail?")
+
+            except Exception as e:
+                print(f"[Agent] LangGraph pipeline error: {e}. Falling back to Ollama.")
+
+        # --- Fallback: direct Ollama ---
         if not _ollama_client or not _ollama_client.is_online():
             return (
                 "Could you describe your symptoms in more detail? "
@@ -395,7 +465,6 @@ class PatientAgent:
             parts.append(chunk)
 
         return "".join(parts) if parts else "Could you describe your symptoms in more detail?"
-
     # ------------------------------------------------------------------ #
     #  IMAGE INFERENCE                                                     #
     # ------------------------------------------------------------------ #
