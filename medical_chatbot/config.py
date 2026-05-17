@@ -7,10 +7,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Using the absolute path found in the user's workspace
 # Model Paths
 # Using the absolute path found in the user's workspace
-MODEL_PATH = "/Users/badrabdelrazek/Desktop/UNI/GradProject/chatbot/brainTumor case/brain_tumor_classifier.h5"
-LUNG_MODEL_PATH = "/Users/badrabdelrazek/Desktop/UNI/GradProject/chatbot/lungCancer case/lung_cancer_efficientnet_b3_final3.pth"
-SKIN_MODEL_PATH = "/Users/badrabdelrazek/Desktop/UNI/GradProject/chatbot/skinDisease case/model.weights.h5"
-
+MODEL_PATH = os.path.join(BASE_DIR, "..", "brainTumor case", "brain_tumor_classifier.h5")
+LUNG_MODEL_PATH = os.path.join(BASE_DIR, "..", "lungCancer case", "lung_cancer_efficientnet_b3_final3.pth")
+SKIN_MODEL_PATH = os.path.join(BASE_DIR, "..", "skinDisease case", "model.weights.h5")
 # System Configuration
 # Set to True if TensorFlow crashes on your system (e.g. Mac M1/M2 Mutex Lock)
 USE_MOCK_MODEL = False
