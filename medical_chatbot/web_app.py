@@ -2,6 +2,8 @@ import os
 import sys
 import uuid
 from flask import Flask, render_template, request, jsonify, session, send_from_directory
+from medical_chatbot.followup.routes import followup_bp
+from medical_chatbot.utils.input_sanitizer import sanitize_input, safe_medical_response
 
 # Ensure project root is in path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -57,14 +59,24 @@ def chat():
     data = request.json
     user_input = data.get('message', '')
     state = get_agent_session()
-    
+
+    # --- Input Sanitization & Injection Guard ---
+    sanitized = sanitize_input(user_input)
+    if not sanitized["is_safe"]:
+        return jsonify({
+            "response": safe_medical_response(),
+            "mode": state["mode"]
+        })
+    user_input = sanitized["clean_text"]
+    # -------------------------------------------
+
     response_text = ""
-    
+
     if state["mode"] == "patient":
         response_text = state["patient_bot"].process_input(user_input)
     else:
         response_text = state["doctor_bot"].process_query(user_input)
-        
+
     return jsonify({"response": response_text, "mode": state["mode"]})
 
 @app.route('/uploads/<filename>')

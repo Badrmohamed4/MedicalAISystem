@@ -9,7 +9,7 @@ class OllamaClient:
 
     def is_online(self):
         try:
-            response = requests.get(self.host, timeout=2)
+            response = requests.get(self.host, timeout=5)
             return response.status_code == 200
         except requests.exceptions.RequestException:
             return False
@@ -64,7 +64,7 @@ class OllamaClient:
         }
 
         try:
-            response = requests.post(self.endpoint, json=payload, timeout=30)
+            response = requests.post(self.endpoint, json=payload, timeout=120)
             response.raise_for_status()
             data = response.json()
             if "message" in data and "content" in data["message"]:
