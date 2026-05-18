@@ -38,8 +38,12 @@ class PatientAgent:
     def process_input(self, text, image_path=None):
         self.session.add_message("patient", text)
 
-	 # ---------- 0. Urgency Check (always first, no LLM) ----------
+     # ---------- 0. Urgency Check (always first, no LLM) ----------
         if text and self._is_urgent(text):
+            print(f"\n{'─'*49}")
+            print(f" PATIENT AGENT — URGENT INPUT DETECTED")
+            print(f"{'─'*49}")
+            print(f"[urgency     ] ⚠️  EMERGENCY PATH — bypassing NLP")
             urgent_response = (
                 "⚠️ This sounds like a medical emergency. "
                 "Please call emergency services (123) immediately "
@@ -52,10 +56,25 @@ class PatientAgent:
 
 
         # ---------- 1. NLP Extraction (BioBERT + Ollama) ----------
+        import time
+        _t0 = time.time()
+        print(f"\n{'─'*49}")
+        print(f" PATIENT AGENT — PROCESSING INPUT")
+        print(f"{'─'*49}")
+        print(f" Input: \"{text[:60]}\"")
+
         intent = self.intent_clf.predict(text)
         entities = self.ner.extract(text)
 
+        _t1 = time.time()
+        symptoms = entities.get("symptoms", [])
+        context = entities.get("medical_context", "none")
+        severity = entities.get("severity", "none")
+        print(f"[nlp_extract ] ✅ {_t1-_t0:.3f}s | intent={intent} | context={context}")
+        print(f"[nlp_extract ] ✅ symptoms={symptoms} | severity={severity}")
+
         self.session.update_context("current_intent", intent)
+        print(f"[session] context updated")
 
         # Check if we are answering a question
         last_q = self.session.context.get("last_asked_question")
@@ -329,7 +348,7 @@ class PatientAgent:
         if scores[best] > 0:
             return best
         return None
-	
+    
     # ------------------------------------------------------------------ #
     #       URGENCY DETECTION (no LLM — deterministic)                   #
     # ------------------------------------------------------------------ #

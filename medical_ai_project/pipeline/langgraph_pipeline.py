@@ -17,8 +17,46 @@ Only nodes 3 and 6 use an LLM.
 import os
 import sys
 from typing import TypedDict, Optional, List
-
 from langgraph.graph import StateGraph, END
+import time
+
+# ── Pipeline Logger ───────────────────────────────────────────────────────────
+class PipelineLogger:
+    """Tracks timing and state for each LangGraph node."""
+
+    def __init__(self):
+        self._start_times = {}
+        self._request_start = None
+
+    def request_start(self):
+        self._request_start = time.time()
+        print("\n" + "─" * 49)
+        print(" LANGGRAPH PIPELINE — NEW REQUEST")
+        print("─" * 49)
+
+    def node_start(self, node_name: str):
+        self._start_times[node_name] = time.time()
+
+    def node_end(self, node_name: str, details: str = ""):
+        elapsed = time.time() - self._start_times.get(node_name, time.time())
+        print(f"[{node_name:<12}] ✅ {elapsed:5.3f}s | {details}")
+
+    def node_blocked(self, node_name: str, reason: str = ""):
+        elapsed = time.time() - self._start_times.get(node_name, time.time())
+        print(f"[{node_name:<12}] 🚫 {elapsed:5.3f}s | BLOCKED — {reason}")
+
+    def node_urgent(self, node_name: str):
+        elapsed = time.time() - self._start_times.get(node_name, time.time())
+        print(f"[{node_name:<12}] ⚠️  {elapsed:5.3f}s | URGENT — emergency path")
+
+    def request_end(self):
+        if self._request_start:
+            total = time.time() - self._request_start
+            print("─" * 49)
+            print(f" TOTAL: {total:.3f}s")
+            print("─" * 49 + "\n")
+
+_logger = PipelineLogger()
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 _pipeline_dir = os.path.dirname(os.path.abspath(__file__))
@@ -99,15 +137,19 @@ class MedicalState(TypedDict):
 
 def sanitize_node(state: MedicalState) -> MedicalState:
     """Sanitizes raw input. Blocks injection attempts."""
+    _logger.node_start("sanitize")
     try:
         from medical_chatbot.utils.input_sanitizer import sanitize_input
     except ImportError:
-        # Fallback if running standalone
-        chatbot_dir = os.path.join(_project_root, "medical_chatbot")
         sys.path.insert(0, _project_root)
         from medical_chatbot.utils.input_sanitizer import sanitize_input
 
     result = sanitize_input(state["raw_input"])
+
+    if not result["is_safe"]:
+        _logger.node_blocked("sanitize", result.get("reason", "injection detected"))
+    else:
+        _logger.node_end("sanitize", f"safe=True | length={len(result['clean_text'])}")
 
     return {
         **state,
@@ -116,7 +158,6 @@ def sanitize_node(state: MedicalState) -> MedicalState:
         "unsafe_reason": result.get("reason", ""),
     }
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # NODE 2 — SAFETY CHECK (no LLM)
 # Detects medical emergencies before spending time on NLP.
@@ -124,14 +165,19 @@ def sanitize_node(state: MedicalState) -> MedicalState:
 
 def safety_node(state: MedicalState) -> MedicalState:
     """Detects urgency keywords. No LLM — must be fast and deterministic."""
+    _logger.node_start("safety")
     text_lower = state["clean_input"].lower()
     is_urgent = any(kw in text_lower for kw in URGENCY_KEYWORDS)
+
+    if is_urgent:
+        _logger.node_urgent("safety")
+    else:
+        _logger.node_end("safety", "urgent=False")
 
     return {
         **state,
         "is_urgent": is_urgent,
     }
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NODE 3 — NLP EXTRACTION (uses Ollama LLM via BioBERT)
@@ -139,27 +185,30 @@ def safety_node(state: MedicalState) -> MedicalState:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def nlp_extract_node(state: MedicalState) -> MedicalState:
-    """
-    Runs BioBERT + Ollama extraction on clean input.
-    Also captures normalized symptoms from NLPProcessor
-    to avoid loading SapBERT twice.
-    """
+    """Runs BioBERT + Ollama extraction on clean input."""
+    _logger.node_start("extract")
     try:
         processor = _get_nlp_processor()
         result = processor.process(state["clean_input"])
 
+        symptoms = result.get("original_symptoms", [])
+        intent = result.get("intent", "others")
+        context = result.get("medical_context", "none")
+
+        _logger.node_end("extract",
+            f"intent={intent} | context={context} | symptoms={symptoms}")
+
         return {
             **state,
-            "intent": result.get("intent", "others"),
-            "symptoms": result.get("original_symptoms", []),
-            # Capture normalized symptoms here — avoids double SapBERT load
+            "intent": intent,
+            "symptoms": symptoms,
             "normalized_symptoms": result.get("normalized_symptoms", []),
-            "medical_context": result.get("medical_context", "none"),
+            "medical_context": context,
             "severity": result.get("severity"),
             "duration": result.get("duration"),
         }
     except Exception as e:
-        print(f"[NLP Extract Node] Error: {e}")
+        print(f"[extract      ] ❌ Error: {e}")
         return {
             **state,
             "intent": "others",
@@ -176,16 +225,12 @@ def nlp_extract_node(state: MedicalState) -> MedicalState:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def normalize_node(state: MedicalState) -> MedicalState:
-    """
-    Normalization pass-through node.
-    Normalized symptoms are already captured in nlp_extract_node
-    via NLPProcessor to avoid loading SapBERT twice.
-    Falls back to original symptoms if normalization was empty.
-    """
+    """Pass-through — normalization already done in nlp_extract_node."""
+    _logger.node_start("normalize")
     normalized = state.get("normalized_symptoms", [])
     if not normalized:
         normalized = state.get("symptoms", [])
-
+    _logger.node_end("normalize", f"normalized={normalized}")
     return {
         **state,
         "normalized_symptoms": normalized,
@@ -210,19 +255,17 @@ MEDIUM_RISK_SYMPTOMS = [
 
 def risk_assess_node(state: MedicalState) -> MedicalState:
     """Deterministic risk scoring. No LLM."""
+    _logger.node_start("risk_assess")
     symptoms = state.get("normalized_symptoms", []) + state.get("symptoms", [])
     severity = state.get("severity", "")
     symptoms_lower = [s.lower() for s in symptoms]
 
     risk = "Low"
-
-    # Severity override
     if severity in ["severe", "extreme"]:
         risk = "High"
     elif severity == "moderate":
         risk = "Medium"
 
-    # Symptom-based scoring
     for s in symptoms_lower:
         if any(h in s for h in HIGH_RISK_SYMPTOMS):
             risk = "High"
@@ -231,6 +274,7 @@ def risk_assess_node(state: MedicalState) -> MedicalState:
             if risk != "High":
                 risk = "Medium"
 
+    _logger.node_end("risk_assess", f"risk={risk} | severity={severity or 'none'}")
     return {
         **state,
         "risk_level": risk,
@@ -243,10 +287,12 @@ def risk_assess_node(state: MedicalState) -> MedicalState:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def response_node(state: MedicalState) -> MedicalState:
-    """Generates a response using Ollama. Only called for normal safe inputs."""
+    """Generates a response using Ollama."""
+    _logger.node_start("respond")
     ollama = _get_ollama_client()
 
     if not ollama.is_online():
+        _logger.node_end("respond", "ollama=offline | using fallback")
         return {
             **state,
             "response": (
@@ -260,7 +306,6 @@ def response_node(state: MedicalState) -> MedicalState:
     context = state.get("medical_context", "unknown")
     risk = state.get("risk_level", "Low")
     session_ctx = state.get("session_context", {})
-    history_summary = session_ctx.get("last_response", "")
 
     system_prompt = (
         "You are MediBot, a professional medical AI assistant. "
@@ -276,15 +321,17 @@ def response_node(state: MedicalState) -> MedicalState:
         f"Symptoms: {symptoms_str or 'none yet'}"
     )
 
-    user_prompt = state["clean_input"]
-
     parts = []
-    for chunk in ollama.stream_chat(system_prompt, user_prompt):
+    for chunk in ollama.stream_chat(system_prompt, state["clean_input"]):
         parts.append(chunk)
 
     response = "".join(parts) if parts else (
         "Could you describe your symptoms in more detail?"
     )
+
+    _logger.node_end("respond",
+        f"response_length={len(response)} chars | ollama=online")
+    _logger.request_end()
 
     return {
         **state,
@@ -318,6 +365,8 @@ def route_after_safety(state: MedicalState) -> str:
 
 def blocked_node(state: MedicalState) -> MedicalState:
     """Returns safe response for injection attempts."""
+    _logger.node_end("sanitize", "BLOCKED — injection attempt")
+    _logger.request_end()
     return {
         **state,
         "response": (
@@ -329,6 +378,8 @@ def blocked_node(state: MedicalState) -> MedicalState:
 
 def urgent_node(state: MedicalState) -> MedicalState:
     """Returns immediate emergency response."""
+    _logger.node_urgent("urgent")
+    _logger.request_end()
     return {
         **state,
         "risk_level": "High",
@@ -439,5 +490,6 @@ def run_pipeline(user_input: str, session_context: dict = None) -> dict:
         "response": "",
     }
 
+    _logger.request_start()
     result = graph.invoke(initial_state)
     return result
