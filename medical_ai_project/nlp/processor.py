@@ -17,6 +17,88 @@ _sapbert_module = _load_module("sapbert", os.path.join(_nlp_dir, "sapbert.py"))
 BioBERTExtractor = _biobert_module.BioBERTExtractor
 SapBERTNormalizer = _sapbert_module.SapBERTNormalizer
 
+# Maps any BioBERT-returned context to our 3 supported domains
+CONTEXT_NORMALIZATION_MAP = {
+    # Brain variants
+    "brain":          "brain",
+    "neurological":   "brain",
+    "neurology":      "brain",
+    "head":           "brain",
+    "neuro":          "brain",
+    "cognitive":      "brain",
+    "mental":         "brain",
+    "cerebral":       "brain",
+    "seizure":        "brain",
+    "epilepsy":       "brain",
+    "consciousness":  "brain",
+    "unconscious":    "brain",
+    "headache":       "brain",
+    "migraine":       "brain",
+
+    # Lung variants
+    "lung":           "lung",
+    "lungs":          "lung",
+    "pulmonary":      "lung",
+    "respiratory":    "lung",
+    "chest":          "lung",
+    "thoracic":       "lung",
+    "cardiovascular": "lung",
+    "cardiac":        "lung",
+    "heart":          "lung",
+    "breathing":      "lung",
+    "breathe":        "lung",
+    "breath":         "lung",
+    "airway":         "lung",
+    "oxygen":         "lung",
+
+    # Skin variants
+    "skin":           "skin",
+    "dermatology":    "skin",
+    "dermatological": "skin",
+    "dermal":         "skin",
+    "cutaneous":      "skin",
+}
+
+# Symptom keywords → medical context fallback
+SYMPTOM_CONTEXT_KEYWORDS = {
+    "brain": [
+        "headache", "head", "dizzy", "dizziness", "seizure", "seizures",
+        "vision", "blurry", "migraine", "memory", "confusion", "unconscious",
+        "collapsed", "fainting", "concussion", "nausea", "vomiting",
+        "consciousness", "neurological", "brain", "skull", "forehead",
+    ],
+    "lung": [
+        "chest", "cough", "coughing", "breath", "breathing", "breathe",
+        "shortness", "wheezing", "lung", "respiratory", "phlegm", "mucus",
+        "inhale", "exhale", "oxygen", "asthma", "bronchitis", "pneumonia",
+        "blood", "sputum", "heart attack", "cardiac", "palpitation",
+    ],
+    "skin": [
+        "skin", "rash", "itch", "itchy", "red", "redness", "mole",
+        "acne", "pimple", "eczema", "psoriasis", "lesion", "patch",
+        "blister", "hives", "flaky", "dry skin", "melanoma", "bump",
+    ],
+}
+
+def infer_context_from_symptoms(symptoms: list) -> str:
+    """Infers medical context from symptom keywords when BioBERT returns none."""
+    scores = {"brain": 0, "lung": 0, "skin": 0}
+    for symptom in symptoms:
+        s_lower = symptom.lower()
+        for domain, keywords in SYMPTOM_CONTEXT_KEYWORDS.items():
+            for kw in keywords:
+                if kw in s_lower or s_lower in kw:
+                    scores[domain] += 1
+                    break
+    best = max(scores, key=scores.get)
+    return best if scores[best] > 0 else "none"
+
+def normalize_context(context: str) -> str:
+    """Maps any context string to brain/lung/skin/none."""
+    if not context:
+        return "none"
+    return CONTEXT_NORMALIZATION_MAP.get(context.lower().strip(), "none")
+
 class NLPProcessor:
     def __init__(self):
         self.extractor = BioBERTExtractor()
@@ -41,12 +123,24 @@ class NLPProcessor:
             # Step 2: Normalize symptoms using SapBERT logic
             normalized_symptoms = self.normalizer.normalize(symptoms)
 
+        raw_context = extraction_result.get("medical_context", "none")
+        mapped_context = normalize_context(raw_context)
+
+        # If BioBERT returned none, infer from symptoms
+        if mapped_context == "none" and symptoms:
+            mapped_context = infer_context_from_symptoms(symptoms)
+
+        # If still none, try inferring from normalized symptoms too
+        if mapped_context == "none" and normalized_symptoms:
+            norm_terms = [term for term, score in normalized_symptoms]
+            mapped_context = infer_context_from_symptoms(norm_terms)
+
         return {
-            "intent": intent,
+            "intent": intent or "others",
             "original_symptoms": symptoms,
             "normalized_symptoms": [term for term, score in normalized_symptoms],
             "scores": [score for term, score in normalized_symptoms],
-            "medical_context": extraction_result.get("medical_context", "none"),
+            "medical_context": mapped_context,
             "severity": extraction_result.get("severity", None),
             "duration": extraction_result.get("duration", None)
         }
