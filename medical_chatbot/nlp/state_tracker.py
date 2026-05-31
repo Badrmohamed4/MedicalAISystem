@@ -31,9 +31,15 @@ class Session:
             new_vals = value
             # Update symptoms set (unique)
             current["symptoms"] = list(set(current["symptoms"] + new_vals.get("symptoms", [])))
-            # Overwrite duration/severity if new one found
-            if new_vals.get("severity"):
-                current["severity"] = new_vals["severity"]
+            # Only upgrade severity, never downgrade
+            SEVERITY_RANK = {"mild": 1, "moderate": 2, "severe": 3, "extreme": 3, "worst": 3}
+            new_sev = new_vals.get("severity")
+            cur_sev = current.get("severity")
+            if new_sev and new_sev not in (None, "null", "none", "", "None"):
+                new_rank = SEVERITY_RANK.get(str(new_sev).lower(), 0)
+                cur_rank = SEVERITY_RANK.get(str(cur_sev or "").lower(), 0)
+                if new_rank > cur_rank:
+                    current["severity"] = new_sev
             if new_vals.get("duration"):
                 current["duration"] = new_vals["duration"]
         else:

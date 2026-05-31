@@ -5,3 +5,6 @@ __pycache__/
 *.h5
 *.pth
 
+fix_*.py
+medical_chatbot/uploads/
+

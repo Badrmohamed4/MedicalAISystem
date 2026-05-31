@@ -109,7 +109,7 @@ FOLLOW_UP_QUESTIONS = {
         "general_checkup": [
             "How long have you been experiencing these symptoms?",
             "Have you noticed any unintentional weight loss recently?",
-            "Do you have a family history of brain, lung, or skin conditions?",
+            "Do you have a family history of any relevant medical conditions?",
             "Are you currently taking any medications?"
         ],
         "risk_factors": [

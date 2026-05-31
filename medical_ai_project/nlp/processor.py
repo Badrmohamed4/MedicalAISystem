@@ -135,12 +135,18 @@ class NLPProcessor:
             norm_terms = [term for term, score in normalized_symptoms]
             mapped_context = infer_context_from_symptoms(norm_terms)
 
+        raw_severity = extraction_result.get("severity", None)
+        raw_duration = extraction_result.get("duration", None)
+        # Normalize null strings to Python None
+        clean_severity = None if raw_severity in (None, "null", "none", "", "None") else raw_severity
+        clean_duration = None if raw_duration in (None, "null", "none", "", "None") else raw_duration
+
         return {
             "intent": intent or "others",
             "original_symptoms": symptoms,
             "normalized_symptoms": [term for term, score in normalized_symptoms],
             "scores": [score for term, score in normalized_symptoms],
             "medical_context": mapped_context,
-            "severity": extraction_result.get("severity", None),
-            "duration": extraction_result.get("duration", None)
+            "severity": clean_severity,
+            "duration": clean_duration
         }

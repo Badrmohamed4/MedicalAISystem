@@ -225,7 +225,19 @@ class PatientAgent:
             self.session.update_context("image_uploaded", True)
             self.session.update_context("image_path", image_path)
             # Use the detected medical context for model selection
-            model_type = current_context if current_context in ["brain", "lung", "skin"] else "brain"
+            if current_context in ["brain", "lung", "skin"]:
+                model_type = current_context
+            else:
+                fname = image_path.lower() if image_path else ""
+                if any(k in fname for k in ["skin", "acne", "rash", "mole", "eczema", "melanoma", "derm"]):
+                    model_type = "skin"
+                elif any(k in fname for k in ["lung", "chest", "pulm", "cancer", "nodule"]):
+                    model_type = "lung"
+                elif any(k in fname for k in ["brain", "tumor", "mri", "glioma", "meningioma"]):
+                    model_type = "brain"
+                else:
+                    model_type = "brain"
+                print(f"[Image] No context set - inferred model_type={model_type} from filename")
             return self._process_image_inference(image_path, model_type)
 
         # ---------- 3. Answer handling ----------
@@ -240,10 +252,32 @@ class PatientAgent:
     # ------------------------------------------------------------------ #
     def _handle_answer(self, text, entities):
         """Process the user's answer to a previously asked question."""
+        last_q = self.session.context.get("last_asked_question")
         self.session.update_context("last_asked_question", None)
 
-        # Find and ask the next relevant question
         all_symptoms = self.session.context["extracted_entities"]["symptoms"]
+        context = self.session.context.get("medical_context", "none")
+
+        # Step 1: Try dynamic follow-up based on this specific answer
+        dynamic_q = self._get_dynamic_followup(
+            last_question=last_q or "",
+            last_answer=text,
+            symptoms=all_symptoms,
+            context=context
+        )
+
+        if dynamic_q:
+            answered = self.session.context.get("answered_questions", [])
+            # Only use dynamic question if not already asked
+            if dynamic_q not in answered:
+                answered.append(dynamic_q)
+                self.session.update_context("answered_questions", answered)
+                self.session.update_context("last_asked_question", dynamic_q)
+                response = f"Understood. {dynamic_q}"
+                self.session.add_message("system", response)
+                return response
+
+        # Step 2: Fall back to static question bank
         next_q, key = self._find_next_question(all_symptoms)
 
         if next_q:
@@ -253,15 +287,41 @@ class PatientAgent:
             self.session.update_context("last_asked_question", next_q)
             response = f"Understood. {next_q}"
         else:
-            # Before giving assessment, ask if the patient has anything else to add
+            # No more questions — ask final prompt if not yet asked
             if not self.session.context.get("asked_final_prompt"):
                 self.session.update_context("asked_final_prompt", True)
                 final_q = "Before I provide my assessment — is there anything else you would like to tell me about your condition?"
                 self.session.update_context("last_asked_question", final_q)
                 response = f"Thank you for your answers. {final_q}"
             else:
-                # All questions exhausted AND final prompt answered → give assessment
-                response = self._generate_assessment()
+                # Final prompt already asked — check what patient said
+                text_lower = text.lower()
+                said_no = any(w in text_lower for w in ["no", "nope", "nothing", "thats all", "that's all", "im done", "i'm done", "no more", "that is all"])
+                said_yes = any(w in text_lower for w in ["yes", "yeah", "yep", "actually", "also", "one more", "there is", "i also", "i have", "forgot"])
+                if said_no:
+                    response = self._generate_assessment()
+                elif said_yes:
+                    # Extract new symptoms from continuation answer
+                    if text.strip():
+                        cont_ents = self.session.context["extracted_entities"]
+                        text_lower_cont = text.lower()
+                        FREE_TEXT_CONT = {
+                            "fever": "fever", "feverish": "fever",
+                            "chills": "chills", "nausea": "nausea",
+                            "vomit": "vomiting", "dizzy": "dizziness",
+                            "tired": "fatigue", "weak": "weakness",
+                            "sweat": "sweating", "cough": "cough",
+                            "pain": "pain", "ache": "ache"
+                        }
+                        for kw, label in FREE_TEXT_CONT.items():
+                            if kw in text_lower_cont and label not in cont_ents["symptoms"]:
+                                cont_ents["symptoms"].append(label)
+                    continuation_q = "Of course. What else would you like to tell me about your condition?"
+                    self.session.update_context("last_asked_question", continuation_q)
+                    self.session.update_context("asked_final_prompt", False)
+                    response = continuation_q
+                else:
+                    response = self._generate_assessment()
 
         self.session.add_message("system", response)
         return response
@@ -366,6 +426,132 @@ class PatientAgent:
         return any(kw in text_lower for kw in self.URGENCY_KEYWORDS)
 
     # ------------------------------------------------------------------ #
+    #  DYNAMIC FOLLOW-UP GENERATION (Ollama-driven)                       #
+    # ------------------------------------------------------------------ #
+    # Max dynamic follow-ups allowed per symptom branch
+    MAX_DYNAMIC_DEPTH = 2
+
+    # Questions that ALWAYS need clarification if patient says yes/some
+    ALWAYS_CLARIFY = {
+        "medication": "Which medications are you currently taking?",
+        "medicine": "Which medications are you currently taking?",
+        "drug": "Which medications are you currently taking?",
+        "family history": "Which specific condition runs in your family?",
+        "cancer": "What type of cancer was diagnosed?",
+        "surgery": "What type of surgery did you have?",
+        "allergy": "What are you allergic to?",
+    }
+
+    # Phrases that indicate Ollama is leaking reasoning instead of asking a question
+    REASONING_LEAK_PHRASES = [
+        "based on the patient",
+        "i would ask",
+        "i would not ask",
+        "this question aims",
+        "the patient's answer",
+        "it seems",
+        "at this time",
+        "in the future",
+        "suggests a potential",
+        "asking more questions",
+        "exploring other aspects",
+        "chain of thought",
+        "my reasoning",
+        "internal",
+    ]
+
+    def _get_dynamic_followup(self, last_question, last_answer, symptoms, context):
+        """
+        Uses Ollama to generate a context-aware follow-up question.
+        Hard-limited to MAX_DYNAMIC_DEPTH per conversation.
+        Sanitizes output to prevent reasoning leakage.
+        """
+        if not _ollama_client or not _ollama_client.is_online():
+            return None
+
+        # Priority check — some questions ALWAYS need clarification regardless of depth
+        last_q_lower = (last_question or "").lower()
+        answer_lower = (last_answer or "").lower()
+        said_yes = any(w in answer_lower for w in ["yes", "yeah", "yep", "i do", "i am", "some", "a few"])
+
+        if said_yes:
+            for keyword, clarification_q in self.ALWAYS_CLARIFY.items():
+                if keyword in last_q_lower:
+                    answered = self.session.context.get("answered_questions", [])
+                    if clarification_q not in answered:
+                        dynamic_count = self.session.context.get("dynamic_followup_count", 0)
+                        self.session.update_context("dynamic_followup_count", dynamic_count + 1)
+                        return clarification_q
+
+        # Depth check — stop if we have asked too many dynamic questions
+        dynamic_count = self.session.context.get("dynamic_followup_count", 0)
+        if dynamic_count >= self.MAX_DYNAMIC_DEPTH:
+            return None
+
+        # Check cache first
+        cache = self.session.context.get("_dynamic_followup_cache", {})
+        cache_key = f"{last_question}::{last_answer}"
+        if cache_key in cache:
+            return cache[cache_key]
+
+        answered = self.session.context.get("answered_questions", [])
+        answered_str = ", ".join(answered[-5:]) if answered else "none"
+        symptoms_str = ", ".join(symptoms) if symptoms else "none"
+
+        system_prompt = (
+            "You are a medical triage assistant. "
+            "Decide if ONE specific follow-up question is needed based on the patient's last answer. "
+            "STRICT RULES:\n"
+            "- Output ONLY the question text, nothing else\n"
+            "- If no follow-up is needed, output exactly: NONE\n"
+            "- Maximum one sentence\n"
+            "- No explanations, no reasoning, no preamble\n"
+            "- No phrases like 'Based on...' or 'I would ask...'\n"
+            "- Only ask if the answer reveals a critical clinical detail needing immediate clarification\n"
+            "- Examples: 'localized' needs WHERE; 'sharp' needs if it radiates; 'yes fever' needs duration"
+        )
+
+        user_prompt = (
+            f"Context: {context} | Symptoms: {symptoms_str}\n"
+            f"Already asked (recent): {answered_str}\n"
+            f"Last question: {last_question}\n"
+            f"Patient answered: {last_answer}\n"
+            f"One follow-up question or NONE:"
+        )
+
+        parts = []
+        for chunk in _ollama_client.stream_chat(system_prompt, user_prompt):
+            parts.append(chunk)
+
+        response = "".join(parts).strip()
+
+        # Sanitize: reject if response contains reasoning leak phrases
+        response_lower = response.lower()
+        for phrase in self.REASONING_LEAK_PHRASES:
+            if phrase in response_lower:
+                cache[cache_key] = None
+                self.session.update_context("_dynamic_followup_cache", cache)
+                return None
+
+        # Reject if too long (reasoning tends to be verbose)
+        if len(response) > 120:
+            cache[cache_key] = None
+            self.session.update_context("_dynamic_followup_cache", cache)
+            return None
+
+        # Reject NONE responses
+        if not response or response.upper().startswith("NONE"):
+            cache[cache_key] = None
+            self.session.update_context("_dynamic_followup_cache", cache)
+            return None
+
+        # Valid question — increment depth counter
+        self.session.update_context("dynamic_followup_count", dynamic_count + 1)
+        cache[cache_key] = response
+        self.session.update_context("_dynamic_followup_cache", cache)
+        return response
+
+    # ------------------------------------------------------------------ #
     #  FOLLOW-UP QUESTION FINDER                                           #
     # ------------------------------------------------------------------ #
     def _find_next_question(self, symptoms):
@@ -391,9 +577,22 @@ class PatientAgent:
                                 return q, key
 
         # 2. If no context-specific question is found, fall back to general checkup questions
+        medical_context = self.session.context.get("medical_context", "none")
+        context_map = {
+            "brain": "brain or neurological",
+            "lung":  "lung or respiratory",
+            "skin":  "skin or dermatological",
+        }
+        context_label = context_map.get(medical_context, "relevant medical")
+
         for q in FOLLOW_UP_QUESTIONS["general"]["general_checkup"]:
-            if q not in answered:
-                return q, "general"
+            # Personalize the family history question to match detected context
+            personalized_q = q.replace(
+                "any relevant medical conditions",
+                f"{context_label} conditions"
+            )
+            if personalized_q not in answered and q not in answered:
+                return personalized_q, "general"
 
         return None, None
 
@@ -405,6 +604,19 @@ class PatientAgent:
         symptoms = self.session.context["extracted_entities"]["symptoms"]
         context = self.session.context.get("medical_context", "general")
         severity = self.session.context["extracted_entities"].get("severity")
+        # Treat string "null" same as None — BioBERT returns "null" string
+        if severity in (None, "null", "none", "", "None"):
+            severity = None
+        if not severity:
+            all_sym = " ".join(self.session.context["extracted_entities"]["symptoms"]).lower()
+            q_answers = " ".join(self.session.context.get("question_answers", {}).values()).lower()
+            combined = all_sym + " " + q_answers
+            if any(w in combined for w in ["sharp", "stabbing", "severe", "intense", "worst", "extreme"]):
+                severity = "severe"
+            elif any(w in combined for w in ["throbbing", "moderate", "dull", "pressure", "heavy", "strong"]):
+                severity = "moderate"
+            elif any(w in combined for w in ["mild", "slight", "minor", "light"]):
+                severity = "mild"
 
         if not symptoms:
             return "I need more information. Could you describe what you're feeling?"
