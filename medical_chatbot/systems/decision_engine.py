@@ -114,21 +114,39 @@ class DecisionEngine:
             risk = "High"
             reasons.append("Signs of increased intracranial pressure")
         
-        # Combinations (e.g. Headache + Vomiting + Vision Issues)
-        # Checking for >= 2 suspicious symptoms
+        symptoms_text = " ".join(symptoms).lower()
+        q_text = " ".join(q_answers.values()).lower()
+        all_text = symptoms_text + " " + q_text
+        has_chest = "chest" in symptoms_text or "angina" in symptoms_text
+        has_arm = "numb" in symptoms_text or "left arm" in symptoms_text
+        has_sob = "dyspnea" in symptoms_text or "short of breath" in symptoms_text
+        has_cardiac = "nitroglycerin" in all_text or "nitro" in all_text
+        has_rad = "shoulder" in symptoms_text or "back" in symptoms_text
+        if has_chest and has_arm:
+            risk = "High"
+            reasons.append("Chest pain with arm numbness")
+        elif has_chest and has_sob and has_rad:
+            risk = "High"
+            reasons.append("Chest pain radiating with breathing difficulty")
+        elif has_chest and has_cardiac:
+            risk = "High"
+            reasons.append("Chest pain with cardiac medication")
+        elif has_chest and has_sob and risk != "High":
+            risk = "Medium"
+            reasons.append("Chest pain with breathing difficulty")
         suspicious_count = 0
         if "headache" in symptoms or "head" in symptoms: suspicious_count += 1
         if "vomiting" in symptoms or "nausea" in symptoms: suspicious_count += 1
         if "vision" in symptoms or "vision loss" in symptoms: suspicious_count += 1
         if "fever" in symptoms: suspicious_count += 1
         if "cough" in symptoms: suspicious_count += 1
-        if "chest pain" in symptoms: suspicious_count += 1
-        if "shortness of breath" in symptoms: suspicious_count += 1
-        
-        if suspicious_count >= 3:
+        if "chest" in symptoms_text: suspicious_count += 1
+        if "dyspnea" in symptoms_text or "short of breath" in symptoms_text: suspicious_count += 1
+        if "numbness" in symptoms_text or "left arm" in symptoms_text: suspicious_count += 1
+        if suspicious_count >= 3 and risk != "High":
             risk = "High"
             reasons.append("Multiple concerning symptoms")
-        elif suspicious_count == 2 and risk != "High":
+        elif suspicious_count == 2 and risk not in ["High","Medium"]:
             risk = "Medium"
             reasons.append("Combination of symptoms")
 

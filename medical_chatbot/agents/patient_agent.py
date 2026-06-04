@@ -255,6 +255,46 @@ class PatientAgent:
         last_q = self.session.context.get("last_asked_question")
         self.session.update_context("last_asked_question", None)
 
+        # If answering the continuation question, extract new symptoms from the answer
+        CONTINUATION_QUESTIONS = [
+            "Of course. What else would you like to tell me about your condition?",
+            "Before I provide my assessment"
+        ]
+        is_continuation_answer = any(cq in (last_q or "") for cq in CONTINUATION_QUESTIONS)
+
+        if is_continuation_answer and text.strip():
+            cont_ents = self.session.context["extracted_entities"]
+            text_lower_cont = text.lower()
+
+            # Extract from NLP entities first
+            for s in entities.get("symptoms", []):
+                if s and s not in cont_ents["symptoms"]:
+                    cont_ents["symptoms"].append(s)
+
+            # Also check free text keywords for common symptoms
+            CONT_KEYWORDS = {
+                "short of breath": "shortness of breath",
+                "shortness of breath": "shortness of breath",
+                "cant breathe": "shortness of breath",
+                "arm numb": "left arm numbness",
+                "arm feels numb": "left arm numbness",
+                "numb": "numbness",
+                "fever": "fever", "feverish": "fever",
+                "chills": "chills", "nausea": "nausea",
+                "vomit": "vomiting", "dizzy": "dizziness",
+                "tired": "fatigue", "weak": "weakness",
+                "sweat": "sweating", "cough": "cough",
+                "palpitat": "palpitations",
+                "racing heart": "palpitations",
+                "swollen": "swelling", "swell": "swelling",
+                "blurry": "blurry vision", "vision": "vision changes",
+                "headache": "headache", "head pain": "headache",
+            }
+            for kw, label in CONT_KEYWORDS.items():
+                if kw in text_lower_cont and label not in cont_ents["symptoms"]:
+                    cont_ents["symptoms"].append(label)
+                    print(f"[Continuation] Added symptom: {label}")
+
         all_symptoms = self.session.context["extracted_entities"]["symptoms"]
         context = self.session.context.get("medical_context", "none")
 
@@ -301,21 +341,6 @@ class PatientAgent:
                 if said_no:
                     response = self._generate_assessment()
                 elif said_yes:
-                    # Extract new symptoms from continuation answer
-                    if text.strip():
-                        cont_ents = self.session.context["extracted_entities"]
-                        text_lower_cont = text.lower()
-                        FREE_TEXT_CONT = {
-                            "fever": "fever", "feverish": "fever",
-                            "chills": "chills", "nausea": "nausea",
-                            "vomit": "vomiting", "dizzy": "dizziness",
-                            "tired": "fatigue", "weak": "weakness",
-                            "sweat": "sweating", "cough": "cough",
-                            "pain": "pain", "ache": "ache"
-                        }
-                        for kw, label in FREE_TEXT_CONT.items():
-                            if kw in text_lower_cont and label not in cont_ents["symptoms"]:
-                                cont_ents["symptoms"].append(label)
                     continuation_q = "Of course. What else would you like to tell me about your condition?"
                     self.session.update_context("last_asked_question", continuation_q)
                     self.session.update_context("asked_final_prompt", False)
