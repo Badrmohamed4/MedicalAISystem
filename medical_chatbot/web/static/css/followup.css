@@ -2,120 +2,206 @@
 /*  Follow-Up Module Styles       */
 /* ============================== */
 
-/* Tabs */
-.fu-tabs {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 2rem;
+/* ---- Patient Grid ---- */
+.fu-patients-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.2rem;
 }
 
-.fu-tab {
-    padding: 0.7rem 1.5rem;
-    border-radius: 12px;
-    border: 1px solid var(--border);
+.fu-patient-card {
     background: var(--bg-card);
-    color: var(--text-dim);
-    font-weight: 600;
-    font-size: 0.95rem;
+    border-radius: 20px;
+    padding: 1.5rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.03);
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.fu-tab:hover {
+.fu-patient-card:hover {
     border-color: var(--primary);
-    color: var(--primary);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 30px rgba(108,93,211,0.12);
 }
 
-.fu-tab.active {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-    box-shadow: 0 4px 12px rgba(108, 93, 211, 0.3);
-}
-
-/* Form Card */
-.fu-form-card {
-    background: var(--bg-card);
-    border-radius: 20px;
-    padding: 1.5rem 2rem;
-    margin-bottom: 2rem;
-    border: 1px solid var(--border);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
-}
-
-.fu-form-card h3 {
-    font-family: 'Outfit', sans-serif;
-    font-size: 1.2rem;
-    margin-bottom: 1rem;
-    color: var(--text-main);
-}
-
-.fu-form-row {
+.fu-pc-top {
     display: flex;
+    align-items: center;
     gap: 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: 1.2rem;
 }
 
-.fu-form-row select,
-.fu-form-row input[type="text"],
-.fu-form-row input[type="datetime-local"] {
-    flex: 1;
-    padding: 0.7rem 1rem;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    font-size: 0.9rem;
-    color: var(--text-main);
+.fu-pc-icon {
+    font-size: 1.8rem;
     background: var(--bg-body);
-    outline: none;
-    font-family: 'Inter', sans-serif;
-    transition: border-color 0.2s;
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
 }
 
-.fu-form-row select:focus,
-.fu-form-row input:focus {
-    border-color: var(--primary);
-}
-
-.fu-form-row input[type="file"] {
+.fu-pc-info {
     flex: 1;
-    padding: 0.6rem;
-    font-size: 0.9rem;
 }
 
-.btn-primary {
-    padding: 0.7rem 1.5rem;
-    background: var(--primary);
-    color: white;
-    border: none;
+.fu-pc-id {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-main);
+    font-family: 'Outfit', sans-serif;
+}
+
+.fu-pc-date {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 0.2rem;
+}
+
+.fu-pc-stats {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.2rem;
+}
+
+.fu-stat {
+    flex: 1;
+    background: var(--bg-body);
     border-radius: 12px;
+    padding: 0.6rem 0.5rem;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+
+.fu-stat-num {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 700;
+    font-family: 'Outfit', sans-serif;
+    color: var(--text-main);
+}
+
+.fu-stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
     font-weight: 600;
-    font-size: 0.95rem;
+}
+
+.fu-stat.overdue .fu-stat-num { color: #E65100; }
+.fu-stat.pending .fu-stat-num { color: #F59E0B; }
+.fu-stat.done    .fu-stat-num { color: #2E7D32; }
+
+.fu-pc-action {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary);
+    text-align: right;
+}
+
+/* ---- Patient ID badge (modal) ---- */
+.fu-patient-id-badge {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: var(--bg-body);
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+}
+
+/* ---- Modal (reuse doctor console pattern) ---- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+}
+.modal-overlay.active { display: flex; }
+
+.modal {
+    background: white;
+    border-radius: 24px;
+    width: 680px;
+    max-width: 95vw;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    animation: modalIn 0.25s ease;
+}
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.4rem 2rem;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: white;
+    z-index: 1;
+}
+
+.modal-header h2 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.3rem;
+}
+
+.modal-close {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: white;
+    font-size: 1rem;
     cursor: pointer;
     transition: all 0.2s;
 }
+.modal-close:hover { background: #FFEDEC; color: #FF5B5B; }
 
-.btn-primary:hover {
-    background: #5b4eb8;
-    transform: translateY(-2px);
+.modal-body {
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-/* List */
+.fu-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-dim);
+}
+
+/* ---- Reminder Cards ---- */
 .fu-list {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-/* Cards */
 .fu-card {
     background: var(--bg-card);
     border-radius: 16px;
-    padding: 1.2rem 1.5rem;
+    padding: 1.1rem 1.4rem;
     display: flex;
     align-items: center;
     gap: 1rem;
     border: 1px solid var(--border);
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.02);
     transition: all 0.2s ease;
 }
 
@@ -124,76 +210,55 @@
     transform: translateY(-2px);
 }
 
-.fu-card.fu-done {
-    opacity: 0.55;
-}
-
-.fu-card.report {
-    border-left: 4px solid var(--primary);
-}
+.fu-card.fu-done { opacity: 0.5; }
 
 .fu-card-icon {
-    font-size: 1.8rem;
-    min-width: 44px;
+    font-size: 1.6rem;
+    min-width: 40px;
     text-align: center;
 }
 
-.fu-card-body {
-    flex: 1;
-}
+.fu-card-body { flex: 1; }
 
 .fu-card-title {
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: var(--text-main);
     margin-bottom: 0.2rem;
 }
 
 .fu-card-meta {
     color: var(--text-dim);
-    font-size: 0.85rem;
-    line-height: 1.5;
+    font-size: 0.82rem;
 }
 
 .fu-card-actions {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.5rem;
     flex-shrink: 0;
 }
 
-/* Badges */
+/* ---- Badges ---- */
 .fu-badge {
-    padding: 0.3rem 0.8rem;
+    padding: 0.3rem 0.7rem;
     border-radius: 20px;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 700;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
-.fu-badge.pending {
-    background: #FFF3E0;
-    color: #E65100;
-}
+.fu-badge.pending,
+.fu-badge.status-pending  { background: #FFF3E0; color: #E65100; }
+.fu-badge.overdue,
+.fu-badge.status-overdue  { background: #FFEDEC; color: #FF5B5B; }
+.fu-badge.done,
+.fu-badge.status-done     { background: #E8F5E9; color: #2E7D32; }
 
-.fu-badge.done {
-    background: #E8F5E9;
-    color: #2E7D32;
-}
-
-.fu-badge.good {
-    background: #E8F5E9;
-    color: #2E7D32;
-}
-
-.fu-badge.followup {
-    background: #FFEDEC;
-    color: #FF5B5B;
-}
-
-/* Small Buttons */
+/* ---- Small Buttons ---- */
 .fu-btn-sm {
-    padding: 0.4rem 0.8rem;
+    padding: 0.4rem 0.9rem;
     border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--bg-body);
@@ -202,6 +267,7 @@
     cursor: pointer;
     transition: all 0.2s;
     color: var(--text-main);
+    white-space: nowrap;
 }
 
 .fu-btn-sm:hover {
@@ -210,18 +276,49 @@
     background: #EAE8FF;
 }
 
-.fu-btn-sm.send {
+.fu-btn-sm.upload-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
     background: #EAE8FF;
     color: var(--primary);
     border-color: var(--primary-light);
 }
 
-.fu-btn-sm.send:hover {
+.fu-btn-sm.upload-label:hover {
     background: var(--primary);
     color: white;
 }
 
-/* Empty State */
+/* ---- Lab link ---- */
+.fu-card-link {
+    margin-top: 0.5rem;
+    font-size: 0.82rem;
+}
+.fu-card-link a {
+    color: var(--primary);
+    word-break: break-all;
+}
+
+.fu-card-link-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+}
+.fu-card-link-form input {
+    flex: 1;
+    padding: 0.45rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-size: 0.82rem;
+    background: var(--bg-body);
+    color: var(--text-main);
+    outline: none;
+}
+.fu-card-link-form input:focus { border-color: var(--primary); }
+
+/* ---- Empty State ---- */
 .fu-empty {
     text-align: center;
     padding: 3rem;

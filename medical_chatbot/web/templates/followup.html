@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,225 +10,200 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/followup.css') }}">
 </head>
-
 <body>
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo"><h1>MediBot</h1></div>
-            <nav class="sidebar-nav">
-                <a href="/" class="nav-item"><span class="icon">⊞</span> Dashboard</a>
-                <a href="/chat" class="nav-item"><span class="icon">💬</span> Patient Chat</a>
-                <a href="/doctor" class="nav-item"><span class="icon">🩺</span> Doctor Console</a>
-                <a href="/followup" class="nav-item active"><span class="icon">📋</span> Follow-Up</a>
-            </nav>
-        </aside>
+<div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="logo"><h1>MediBot</h1></div>
+        <nav class="sidebar-nav">
+            <a href="/" class="nav-item"><span class="icon">⊞</span> Dashboard</a>
+            <a href="/chat" class="nav-item"><span class="icon">💬</span> Patient Chat</a>
+            <a href="/doctor" class="nav-item"><span class="icon">🩺</span> Doctor Console</a>
+            <a href="/followup" class="nav-item active"><span class="icon">📋</span> Follow-Up</a>
+        </nav>
+    </aside>
 
-        <!-- Main Content -->
-        <main class="main-content">
-            <header class="top-bar">
-                <div>
-                    <h2>Patient Follow-Up</h2>
-                    <p class="subtitle">Manage reminders, upload medical tests, and track results.</p>
-                </div>
-            </header>
-
-            <!-- Tab Navigation -->
-            <div class="fu-tabs">
-                <button class="fu-tab active" onclick="switchTab('reminders')">⏰ Reminders</button>
-                <button class="fu-tab" onclick="switchTab('uploads')">📤 Uploads</button>
-                <button class="fu-tab" onclick="switchTab('reports')">📊 Reports</button>
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="top-bar">
+            <div>
+                <h2>Patient Follow-Up</h2>
+                <p class="subtitle">Track all patients' reminders, scans, and lab results.</p>
             </div>
+        </header>
 
-            <!-- ===================== REMINDERS TAB ===================== -->
-            <section id="tab-reminders" class="fu-section">
-                <div class="fu-form-card">
-                    <h3>Add New Reminder</h3>
-                    <div class="fu-form-row">
-                        <select id="rem-type">
-                            <option value="medication">💊 Medication</option>
-                            <option value="scan">🩻 MRI / Scan Appointment</option>
-                            <option value="lab">🧪 Lab Test / Checkup</option>
-                        </select>
-                        <input type="text" id="rem-title" placeholder="e.g. Take Aspirin 100mg">
-                    </div>
-                    <div class="fu-form-row">
-                        <input type="datetime-local" id="rem-datetime">
-                        <input type="text" id="rem-notes" placeholder="Optional notes...">
-                    </div>
-                    <button class="btn-primary" onclick="addReminder()">Add Reminder</button>
-                </div>
+        <!-- All patients list -->
+        <div id="patients-list" class="fu-patients-grid">
+            <!-- Populated by JS -->
+        </div>
+    </main>
+</div>
 
-                <div id="reminders-list" class="fu-list">
-                    <!-- Populated by JS -->
-                </div>
-            </section>
-
-            <!-- ===================== UPLOADS TAB ===================== -->
-            <section id="tab-uploads" class="fu-section" style="display:none">
-                <div class="fu-form-card">
-                    <h3>Upload Medical Test</h3>
-                    <div class="fu-form-row">
-                        <select id="upload-type">
-                            <option value="scan">🩻 MRI / Scan Image</option>
-                            <option value="lab_report">📄 Lab Report (PDF / Image)</option>
-                        </select>
-                        <input type="file" id="upload-file" accept="image/*,.pdf">
-                    </div>
-                    <button class="btn-primary" onclick="uploadFile()">Upload</button>
-                </div>
-
-                <div id="uploads-list" class="fu-list">
-                    <!-- Populated by JS -->
-                </div>
-            </section>
-
-            <!-- ===================== REPORTS TAB ===================== -->
-            <section id="tab-reports" class="fu-section" style="display:none">
-                <div id="reports-list" class="fu-list">
-                    <!-- Populated by JS -->
-                </div>
-            </section>
-        </main>
+<!-- ===== Reminders Modal ===== -->
+<div class="modal-overlay" id="reminders-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>📋 Follow-Up Reminders</h2>
+            <div style="display:flex;align-items:center;gap:0.5rem">
+                <span class="fu-patient-id-badge" id="modal-pid"></span>
+                <button class="modal-close" onclick="closeModal()">✕</button>
+            </div>
+        </div>
+        <div class="modal-body" id="modal-reminders-list">
+            <!-- Populated by JS -->
+        </div>
     </div>
+</div>
 
-    <script>
-        // ---- Tab Switching ----
-        function switchTab(tab) {
-            document.querySelectorAll('.fu-section').forEach(s => s.style.display = 'none');
-            document.querySelectorAll('.fu-tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('tab-' + tab).style.display = 'block';
-            event.target.classList.add('active');
-            if (tab === 'reminders') loadReminders();
-            if (tab === 'uploads') loadUploads();
-            if (tab === 'reports') loadReports();
+<script>
+    let currentPid = null;
+
+    // ============================================================
+    //  ALL PATIENTS VIEW
+    // ============================================================
+    async function loadAllPatients() {
+        const res  = await fetch('/api/followup/all_patients');
+        const data = await res.json();
+        const grid = document.getElementById('patients-list');
+
+        if (!data.patients.length) {
+            grid.innerHTML = '<div class="fu-empty">No patient follow-ups recorded yet.</div>';
+            return;
         }
 
-        // ---- REMINDERS ----
-        async function addReminder() {
-            const type = document.getElementById('rem-type').value;
-            const title = document.getElementById('rem-title').value;
-            const dt = document.getElementById('rem-datetime').value;
-            const notes = document.getElementById('rem-notes').value;
-            if (!title || !dt) { alert('Please fill in title and date/time.'); return; }
+        grid.innerHTML = data.patients.map(p => {
+            const date = new Date(p.last_activity * 1000).toLocaleDateString();
+            const hasPending  = p.pending_count  > 0;
+            const hasOverdue  = p.overdue_count  > 0;
+            const statusClass = hasOverdue ? 'status-overdue' : hasPending ? 'status-pending' : 'status-done';
+            const statusLabel = hasOverdue ? 'OVERDUE' : hasPending ? 'PENDING' : 'ALL DONE';
 
-            await fetch('/api/followup/reminders', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({type, title, date_time: dt, notes})
-            });
-            document.getElementById('rem-title').value = '';
-            document.getElementById('rem-notes').value = '';
-            loadReminders();
-        }
-
-        async function loadReminders() {
-            const res = await fetch('/api/followup/reminders');
-            const data = await res.json();
-            const list = document.getElementById('reminders-list');
-            if (!data.reminders.length) {
-                list.innerHTML = '<div class="fu-empty">No reminders yet. Add one above!</div>';
-                return;
-            }
-            list.innerHTML = data.reminders.map(r => `
-                <div class="fu-card ${r.status === 'done' ? 'fu-done' : ''}">
-                    <div class="fu-card-icon">${r.type === 'medication' ? '💊' : r.type === 'scan' ? '🩻' : '🧪'}</div>
-                    <div class="fu-card-body">
-                        <div class="fu-card-title">${r.title}</div>
-                        <div class="fu-card-meta">${r.date_time}${r.notes ? ' — ' + r.notes : ''}</div>
+            return `
+            <div class="fu-patient-card" onclick="openPatient('${p.patient_id}')">
+                <div class="fu-pc-top">
+                    <div class="fu-pc-icon">👤</div>
+                    <div class="fu-pc-info">
+                        <div class="fu-pc-id">ID: ${p.patient_id.substring(0,8)}</div>
+                        <div class="fu-pc-date">Last activity: ${date}</div>
                     </div>
-                    <div class="fu-card-actions">
-                        <span class="fu-badge ${r.status}">${r.status}</span>
-                        ${r.status !== 'done' ? `<button class="fu-btn-sm" onclick="markDone('${r.id}')">✓ Done</button>` : ''}
-                    </div>
+                    <span class="fu-badge ${statusClass}">${statusLabel}</span>
                 </div>
-            `).join('');
-        }
-
-        async function markDone(rid) {
-            await fetch(`/api/followup/reminders/${rid}/done`, {method: 'POST'});
-            loadReminders();
-        }
-
-        // ---- UPLOADS ----
-        async function uploadFile() {
-            const fileInput = document.getElementById('upload-file');
-            const fileType = document.getElementById('upload-type').value;
-            if (!fileInput.files.length) { alert('Please select a file.'); return; }
-
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('file_type', fileType);
-
-            await fetch('/api/followup/upload', {method: 'POST', body: formData});
-            fileInput.value = '';
-            loadUploads();
-        }
-
-        async function loadUploads() {
-            const res = await fetch('/api/followup/uploads');
-            const data = await res.json();
-            const list = document.getElementById('uploads-list');
-            if (!data.uploads.length) {
-                list.innerHTML = '<div class="fu-empty">No uploads yet.</div>';
-                return;
-            }
-            list.innerHTML = data.uploads.map(u => `
-                <div class="fu-card">
-                    <div class="fu-card-icon">${u.file_type === 'scan' ? '🩻' : '📄'}</div>
-                    <div class="fu-card-body">
-                        <div class="fu-card-title">${u.original_name}</div>
-                        <div class="fu-card-meta">Type: ${u.file_type} ${u.evaluation ? '| Evaluation: ' + u.evaluation : ''}</div>
-                    </div>
-                    <div class="fu-card-actions">
-                        ${u.evaluation ? `<span class="fu-badge ${u.evaluation === 'Good' ? 'good' : 'followup'}">${u.evaluation}</span>` : `<button class="fu-btn-sm" onclick="evaluateUpload('${u.id}')">🔍 Evaluate</button>`}
-                        ${!u.sent_to_doctor ? `<button class="fu-btn-sm send" onclick="sendToDoctor('${u.id}')">📨 Send to Doctor</button>` : '<span class="fu-badge done">Sent ✓</span>'}
-                    </div>
+                <div class="fu-pc-stats">
+                    <div class="fu-stat"><span class="fu-stat-num">${p.total}</span><span class="fu-stat-label">Total</span></div>
+                    <div class="fu-stat overdue"><span class="fu-stat-num">${p.overdue_count}</span><span class="fu-stat-label">Overdue</span></div>
+                    <div class="fu-stat pending"><span class="fu-stat-num">${p.pending_count}</span><span class="fu-stat-label">Pending</span></div>
+                    <div class="fu-stat done"><span class="fu-stat-num">${p.done_count}</span><span class="fu-stat-label">Done</span></div>
                 </div>
-            `).join('');
+                <div class="fu-pc-action">View Reminders →</div>
+            </div>`;
+        }).join('');
+    }
+
+    // ============================================================
+    //  MODAL — one patient's reminders
+    // ============================================================
+    async function openPatient(pid) {
+        currentPid = pid;
+        document.getElementById('modal-pid').textContent = '🪪 ' + pid.substring(0,8);
+        document.getElementById('modal-reminders-list').innerHTML = '<div class="fu-loading">Loading…</div>';
+        document.getElementById('reminders-modal').classList.add('active');
+
+        const res  = await fetch('/api/followup/patient/' + pid + '/reminders');
+        const data = await res.json();
+        renderReminders(data.reminders);
+    }
+
+    function closeModal() {
+        document.getElementById('reminders-modal').classList.remove('active');
+        currentPid = null;
+        loadAllPatients();  // refresh counts after changes
+    }
+
+    function renderReminders(reminders) {
+        const container = document.getElementById('modal-reminders-list');
+        if (!reminders.length) {
+            container.innerHTML = '<div class="fu-empty">No reminders for this patient.</div>';
+            return;
         }
 
-        async function evaluateUpload(uid) {
-            await fetch(`/api/followup/evaluate/${uid}`, {method: 'POST'});
-            loadUploads();
-        }
+        container.innerHTML = reminders.map(r => {
+            const icon = r.type === 'medication' ? '💊' : r.type === 'scan' ? '🩻' : '🧪';
+            const isFollowupScan = r.type === 'scan' && r.title === 'Follow-up Scan';
+            const isLab = r.type === 'lab';
 
-        async function sendToDoctor(uid) {
-            await fetch(`/api/followup/send/${uid}`, {method: 'POST'});
-            loadUploads();
-            alert('Results sent to doctor successfully!');
-        }
-
-        // ---- REPORTS ----
-        async function loadReports() {
-            const res = await fetch('/api/followup/reports');
-            const data = await res.json();
-            const list = document.getElementById('reports-list');
-            if (!data.reports.length) {
-                list.innerHTML = '<div class="fu-empty">No reports sent to doctor yet.</div>';
-                return;
+            let scanAction = '';
+            if (isFollowupScan) {
+                scanAction = r.attached_upload
+                    ? `<span class="fu-badge done">Scan Uploaded ✓</span>`
+                    : `<label class="fu-btn-sm upload-label">
+                            📤 Upload Scan
+                            <input type="file" accept="image/*,.pdf,.dcm" style="display:none"
+                                   onchange="uploadScanForReminder('${r.id}', this)">
+                       </label>`;
             }
-            list.innerHTML = data.reports.map(r => `
-                <div class="fu-card report">
-                    <div class="fu-card-icon">📊</div>
-                    <div class="fu-card-body">
-                        <div class="fu-card-title">Report #${r.id}</div>
-                        <div class="fu-card-meta">
-                            Patient: ${r.patient_id.substring(0, 8)}... |
-                            File: ${r.file_name} |
-                            Type: ${r.file_type}
-                        </div>
-                        <div class="fu-card-meta">
-                            Evaluation: <strong>${r.evaluation}</strong> |
-                            Status: <strong>${r.status}</strong>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        }
 
-        // ---- INIT ----
-        loadReminders();
-    </script>
+            let linkRow = '';
+            if (isLab) {
+                linkRow = r.link
+                    ? `<div class="fu-card-link">🔗 <a href="${r.link}" target="_blank" rel="noopener">${r.link}</a></div>`
+                    : `<div class="fu-card-link-form">
+                            <input type="text" placeholder="Paste link to lab results..." id="link-${r.id}">
+                            <button class="fu-btn-sm" onclick="saveReminderLink('${r.id}')">Save Link</button>
+                       </div>`;
+            }
+
+            return `
+            <div class="fu-card ${r.status === 'done' ? 'fu-done' : ''}">
+                <div class="fu-card-icon">${icon}</div>
+                <div class="fu-card-body">
+                    <div class="fu-card-title">${r.title}</div>
+                    <div class="fu-card-meta">${r.date_time}${r.notes ? ' — ' + r.notes : ''}</div>
+                    ${linkRow}
+                </div>
+                <div class="fu-card-actions">
+                    <span class="fu-badge ${r.status}">${r.status}</span>
+                    ${scanAction}
+                    ${r.status !== 'done'
+                        ? `<button class="fu-btn-sm" onclick="markDone('${r.id}')">✓ Done</button>`
+                        : ''}
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function markDone(rid) {
+        await fetch(`/api/followup/reminders/${rid}/done`, {method: 'POST'});
+        openPatient(currentPid);
+    }
+
+    async function saveReminderLink(rid) {
+        const input = document.getElementById('link-' + rid);
+        const link  = (input && input.value.trim()) || '';
+        if (!link) { alert('Please paste a link first.'); return; }
+        await fetch(`/api/followup/reminders/${rid}/link`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({link})
+        });
+        openPatient(currentPid);
+    }
+
+    async function uploadScanForReminder(rid, input) {
+        if (!input.files.length) return;
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+        await fetch(`/api/followup/reminders/${rid}/scan`, {method: 'POST', body: formData});
+        alert('Scan uploaded and sent to doctor!');
+        openPatient(currentPid);
+    }
+
+    // Close modal on overlay click
+    document.getElementById('reminders-modal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+    });
+
+    // ---- INIT ----
+    loadAllPatients();
+</script>
 </body>
 </html>

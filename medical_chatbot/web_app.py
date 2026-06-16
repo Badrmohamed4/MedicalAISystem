@@ -1,8 +1,10 @@
 import os
 import sys
 import uuid
+from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from medical_chatbot.followup.routes import followup_bp
+from medical_chatbot.followup import store as followup_store
 from medical_chatbot.utils.input_sanitizer import sanitize_input, safe_medical_response
 
 # Ensure project root is in path
@@ -13,7 +15,6 @@ sys.path.append(project_root)
 from medical_chatbot.nlp.state_tracker import Session
 from medical_chatbot.agents.patient_agent import PatientAgent
 from medical_chatbot.agents.doctor_agent import DoctorAgent
-from medical_chatbot.followup.routes import followup_bp
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
 app.secret_key = "secret_key_medical_chatbot_mvp"
@@ -267,21 +268,49 @@ def save_followup_plan():
     uid = data.get('uid')
     if not uid:
         return jsonify({"error": "Missing session ID"}), 400
-        
-    state = store.get_session(uid)
+
+    state = session_store.get(uid)
     if not state:
         return jsonify({"error": "Session not found"}), 404
-        
+
+    medications = data.get("medications", [])
+    next_scan = data.get("nextScan", "")
+    visit_date = data.get("visitDate", "")
+    lab_tests = data.get("labTests", "")
+    notes = data.get("notes", "")
+
     # Save the follow-up plan to the session context
     state["session"].update_context("doctor_followup_plan", {
-        "medications": data.get("medications", []),
-        "next_scan": data.get("nextScan", ""),
-        "visit_date": data.get("visitDate", ""),
-        "lab_tests": data.get("labTests", ""),
-        "notes": data.get("notes", ""),
+        "medications": medications,
+        "next_scan": next_scan,
+        "visit_date": visit_date,
+        "lab_tests": lab_tests,
+        "notes": notes,
         "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M")
     })
-    
+
+    # --- Push the plan into the patient's Follow-Up reminders ---
+    # The patient-side follow-up store is keyed by the same user_id (uid),
+    # since both share Flask's session["user_id"].
+    if visit_date:
+        followup_store.add_reminder(
+            uid, "appointment", "Doctor Follow-up Visit", visit_date, notes=notes
+        )
+    if next_scan:
+        followup_store.add_reminder(
+            uid, "scan", "Follow-up Scan", next_scan, notes=notes
+        )
+    if lab_tests:
+        followup_store.add_reminder(
+            uid, "lab", lab_tests, next_scan or visit_date, notes=notes
+        )
+    for med in medications:
+        med_name = med.get("name", med) if isinstance(med, dict) else med
+        med_time = med.get("date_time", "") if isinstance(med, dict) else ""
+        followup_store.add_reminder(
+            uid, "medication", med_name, med_time, notes=notes
+        )
+
     return jsonify({"status": "success"})
 
 if __name__ == '__main__':

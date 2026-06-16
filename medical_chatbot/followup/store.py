@@ -1,46 +1,65 @@
 """
-Follow-Up Data Store
-Simple in-memory store for reminders, uploads, and reports.
-Linked by Patient ID.
+Follow-Up Data Store — In-memory
+Keyed by patient_id (= Flask session user_id).
 """
 import time
 import uuid
 
-
-# In-memory stores (use DB in production)
-_reminders = {}   # patient_id -> [reminder, ...]
-_uploads = {}     # patient_id -> [upload, ...]
-_reports = {}     # patient_id -> [report, ...]
+_reminders = {}
+_uploads   = {}
+_reports   = {}
 
 
 # ------------------------------------------------------------------ #
 #  REMINDERS                                                          #
 # ------------------------------------------------------------------ #
 def add_reminder(patient_id, reminder_type, title, date_time, notes=""):
-    """Add a reminder for a patient. Types: medication, scan, lab"""
-    if patient_id not in _reminders:
-        _reminders[patient_id] = []
-
-    reminder = {
+    _reminders.setdefault(patient_id, [])
+    r = {
         "id": str(uuid.uuid4())[:8],
         "type": reminder_type,
         "title": title,
         "date_time": date_time,
         "notes": notes,
         "status": "pending",
+        "link": None,
+        "attached_upload": None,
         "created_at": time.time()
     }
-    _reminders[patient_id].append(reminder)
-    return reminder
+    _reminders[patient_id].append(r)
+    return r
 
 
 def get_reminders(patient_id):
-    """Get all reminders for a patient."""
-    return _reminders.get(patient_id, [])
+    reminders = _reminders.get(patient_id, [])
+    now_str = time.strftime("%Y-%m-%dT%H:%M")
+    for r in reminders:
+        if r["status"] == "pending" and r.get("date_time") and r["date_time"] < now_str:
+            r["status"] = "overdue"
+    return sorted(reminders, key=lambda r: (r.get("date_time") == "", r.get("date_time", "")))
+
+
+def get_all_patients_reminders():
+    """Summary of every patient for the overview page."""
+    result = []
+    for pid, reminders in _reminders.items():
+        # re-run overdue check
+        now_str = time.strftime("%Y-%m-%dT%H:%M")
+        for r in reminders:
+            if r["status"] == "pending" and r.get("date_time") and r["date_time"] < now_str:
+                r["status"] = "overdue"
+        result.append({
+            "patient_id":    pid,
+            "total":         len(reminders),
+            "pending_count": sum(1 for r in reminders if r["status"] == "pending"),
+            "overdue_count": sum(1 for r in reminders if r["status"] == "overdue"),
+            "done_count":    sum(1 for r in reminders if r["status"] == "done"),
+            "last_activity": max(r["created_at"] for r in reminders)
+        })
+    return sorted(result, key=lambda p: p["last_activity"], reverse=True)
 
 
 def mark_reminder_done(patient_id, reminder_id):
-    """Mark a reminder as completed."""
     for r in _reminders.get(patient_id, []):
         if r["id"] == reminder_id:
             r["status"] = "done"
@@ -48,15 +67,28 @@ def mark_reminder_done(patient_id, reminder_id):
     return False
 
 
+def set_reminder_link(patient_id, reminder_id, link):
+    for r in _reminders.get(patient_id, []):
+        if r["id"] == reminder_id:
+            r["link"] = link
+            return r
+    return None
+
+
+def attach_scan_to_reminder(patient_id, reminder_id, upload_id):
+    for r in _reminders.get(patient_id, []):
+        if r["id"] == reminder_id:
+            r["attached_upload"] = upload_id
+            return r
+    return None
+
+
 # ------------------------------------------------------------------ #
-#  UPLOADS                                                             #
+#  UPLOADS                                                            #
 # ------------------------------------------------------------------ #
 def add_upload(patient_id, filename, filepath, file_type, original_name):
-    """Record an uploaded file. file_type: scan, lab_report"""
-    if patient_id not in _uploads:
-        _uploads[patient_id] = []
-
-    upload = {
+    _uploads.setdefault(patient_id, [])
+    u = {
         "id": str(uuid.uuid4())[:8],
         "filename": filename,
         "filepath": filepath,
@@ -66,21 +98,17 @@ def add_upload(patient_id, filename, filepath, file_type, original_name):
         "sent_to_doctor": False,
         "uploaded_at": time.time()
     }
-    _uploads[patient_id].append(upload)
-    return upload
+    _uploads[patient_id].append(u)
+    return u
 
 
 def get_uploads(patient_id):
-    """Get all uploads for a patient."""
     return _uploads.get(patient_id, [])
 
 
 def evaluate_upload(patient_id, upload_id):
-    """Simple evaluation: labels result as 'Good' or 'Needs follow-up'."""
     for u in _uploads.get(patient_id, []):
         if u["id"] == upload_id:
-            # Simple logic: PDFs/lab reports default to "Needs follow-up"
-            # Scans check filename for known keywords
             name = u["original_name"].lower()
             if u["file_type"] == "lab_report":
                 u["evaluation"] = "Needs follow-up"
@@ -93,29 +121,16 @@ def evaluate_upload(patient_id, upload_id):
 
 
 # ------------------------------------------------------------------ #
-#  DOCTOR REPORTS                                                      #
+#  DOCTOR REPORTS                                                     #
 # ------------------------------------------------------------------ #
 def send_to_doctor(patient_id, upload_id):
-    """Send an upload to the doctor and generate a simple report."""
-    uploads = _uploads.get(patient_id, [])
-    target = None
-    for u in uploads:
-        if u["id"] == upload_id:
-            target = u
-            break
-
+    target = next((u for u in _uploads.get(patient_id, []) if u["id"] == upload_id), None)
     if not target:
         return None
-
-    # Auto-evaluate if not done yet
     if not target["evaluation"]:
         evaluate_upload(patient_id, upload_id)
-
     target["sent_to_doctor"] = True
-
-    if patient_id not in _reports:
-        _reports[patient_id] = []
-
+    _reports.setdefault(patient_id, [])
     report = {
         "id": str(uuid.uuid4())[:8],
         "patient_id": patient_id,
@@ -131,14 +146,8 @@ def send_to_doctor(patient_id, upload_id):
 
 
 def get_reports(patient_id):
-    """Get all doctor reports for a patient."""
     return _reports.get(patient_id, [])
 
 
 def get_all_reports():
-    """Get all reports across all patients (for doctor view)."""
-    all_reports = []
-    for pid, reports in _reports.items():
-        for r in reports:
-            all_reports.append(r)
-    return all_reports
+    return [r for reports in _reports.values() for r in reports]
