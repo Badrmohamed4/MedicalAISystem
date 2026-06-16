@@ -1,28 +1,33 @@
+# ─────────────────────────────────────────
+#  MedBot — Full Requirements
+#  Run: pip install -r requirements.txt
+# ─────────────────────────────────────────
+
 # Web Framework
 flask==3.0.0
 werkzeug==3.0.0
 
-# AI / LLM
+# HTTP
 requests==2.31.0
-langgraph>=0.1.0
 
-# NLP & Transformers
+# NLP & Transformers (BioBERT + SapBERT)
 transformers==4.40.2
 sentence-transformers==2.7.0
 
-# Deep Learning — CPU versions (works on Windows/Mac/Linux)
-# For GPU support replace torch with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+# LangGraph pipeline
+langgraph>=0.1.0
+
+# PyTorch — Lung model (EfficientNet B3)
 torch==2.3.0
 torchvision==0.18.0
 
-# TensorFlow — choose ONE depending on your OS:
-# Windows / Linux:
+# TensorFlow — Brain + Skin models
+# ── Windows / Linux:
 tensorflow==2.16.2
-# Mac M1/M2/M3 — comment line above and uncomment:
-# tensorflow-macos==2.16.2
-# tensorflow-metal
+# ── Mac M1/M2/M3 → comment line above and run:
+#    pip install tensorflow-macos tensorflow-metal
 
-# Data & Image
+# Data & Image processing
 numpy==1.26.4
 pillow==10.3.0
 h5py==3.11.0
