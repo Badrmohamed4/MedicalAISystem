@@ -25,11 +25,37 @@ class ModelWrapper:
         self.PIL_Image = None
 
     def _ensure_tf(self):
-        # CRITICAL: TensorFlow causes a hard mutex crash on this system (macOS/LibreSSL/OpenMP conflict).
-        # We disable it to prevent the entire app from crashing.
-        # Verification confirmed TF crashes even with lazy loading and env vars.
-        print("NOTICE: TensorFlow disabled to prevent macOS mutex crash. Brain model will use Mock.")
-        return False
+        if self.tf_ready:
+            return True
+        if USE_MOCK_MODEL:
+            return False
+        try:
+            os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+            os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+
+            print("Lazy Loading TensorFlow...")
+            import tensorflow as tf
+            from tensorflow.keras.models import load_model
+            from tensorflow.keras.preprocessing import image
+            from tensorflow.keras.applications.mobilenet_v2 import preprocess_input as mobilenet_preprocess
+            from tensorflow.keras.applications.efficientnet import preprocess_input as efficientnet_preprocess
+
+            self.tf = tf
+            self.tf_load_model = load_model
+            self.tf_image = image
+            self.tf_mobilenet_preprocess = mobilenet_preprocess
+            self.tf_efficientnet_preprocess = efficientnet_preprocess
+            # default preprocess (used by brain model)
+            self.tf_preprocess_input = efficientnet_preprocess
+            self.tf_ready = True
+            print(f"TensorFlow {tf.__version__} Loaded.")
+            return True
+        except ImportError as e:
+            print(f"WARNING: TensorFlow not installed: {e}")
+            return False
+        except Exception as e:
+            print(f"WARNING: TensorFlow failed to load: {e}")
+            return False
 
     def _ensure_torch(self):
         if self.torch_ready: return True
@@ -54,13 +80,28 @@ class ModelWrapper:
     def _load_models(self):
         if self.loaded: return
 
-        # 1. Load Brain Model (TF) - Disabled due to crash
+        # 1. Load Brain Model (TF)
         if self._ensure_tf() and not self.brain_model and os.path.exists(MODEL_PATH):
-             pass # Skipped
-             
-        # 2. Load Skin Model (TF) - Disabled due to crash
+            try:
+                print(f"Loading Brain Model from {MODEL_PATH}...")
+                self.brain_model = self.tf_load_model(MODEL_PATH)
+                print("SUCCESS: Brain Model Loaded.")
+            except Exception as e:
+                print(f"Error loading Brain Model: {e}")
+
+        # 2. Load Skin Model (Keras 3 split format: config.json + model.weights.h5)
         if self._ensure_tf() and not self.skin_model and os.path.exists(SKIN_MODEL_PATH):
-             pass # Skipped
+            try:
+                import json, tensorflow as tf
+                print(f"Loading Skin Model from {SKIN_MODEL_PATH}...")
+                config_path = os.path.join(os.path.dirname(SKIN_MODEL_PATH), "config.json")
+                with open(config_path) as f:
+                    model_config = json.load(f)
+                self.skin_model = tf.keras.models.model_from_json(json.dumps(model_config))
+                self.skin_model.load_weights(SKIN_MODEL_PATH)
+                print("SUCCESS: Skin Model Loaded.")
+            except Exception as e:
+                print(f"Error loading Skin Model: {e}")
 
         # 3. Load Lung Model (Torch)
         if self._ensure_torch() and not self.lung_model and os.path.exists(LUNG_MODEL_PATH):
@@ -94,8 +135,17 @@ class ModelWrapper:
         self.loaded = True
 
     def preprocess_tf(self, img_path):
-        if not self.tf_ready: return None
-        return None
+        if not self.tf_ready:
+            return None
+        try:
+            size = IMG_SIZE if isinstance(IMG_SIZE, tuple) else (IMG_SIZE, IMG_SIZE)
+            img = self.tf_image.load_img(img_path, target_size=size)
+            arr = self.tf_image.img_to_array(img)
+            arr = np.expand_dims(arr, axis=0)
+            return self.tf_preprocess_input(arr)
+        except Exception as e:
+            print(f"TF Preprocess Error: {e}")
+            return None
 
     def preprocess_torch(self, img_path):
         if not self.torch_ready: return None

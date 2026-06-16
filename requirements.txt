@@ -1,9 +1,29 @@
-flask
-tensorflow
-numpy
-pillow
+# Web Framework
+flask==3.0.0
+werkzeug==3.0.0
+
+# AI / LLM
+requests==2.31.0
+langgraph>=0.1.0
+
+# NLP & Transformers
 transformers==4.40.2
+sentence-transformers==2.7.0
+
+# Deep Learning — CPU versions (works on Windows/Mac/Linux)
+# For GPU support replace torch with: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 torch==2.3.0
 torchvision==0.18.0
-sentence-transformers==2.7.0
+
+# TensorFlow — choose ONE depending on your OS:
+# Windows / Linux:
+tensorflow==2.16.2
+# Mac M1/M2/M3 — comment line above and uncomment:
+# tensorflow-macos==2.16.2
+# tensorflow-metal
+
+# Data & Image
+numpy==1.26.4
+pillow==10.3.0
+h5py==3.11.0
 scikit-learn==1.5.0
