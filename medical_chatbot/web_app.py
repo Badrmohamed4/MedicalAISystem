@@ -4,6 +4,11 @@ import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, send_from_directory
 from medical_chatbot.followup.routes import followup_bp
+from medical_chatbot.database.db_manager import (
+    init_db, save_session, save_message, save_symptoms,
+    save_image, save_prediction
+)
+
 from medical_chatbot.followup import store as followup_store
 from medical_chatbot.utils.input_sanitizer import sanitize_input, safe_medical_response
 
@@ -20,6 +25,9 @@ app = Flask(__name__, template_folder="web/templates", static_folder="web/static
 app.secret_key = "secret_key_medical_chatbot_mvp"
 app.config['UPLOAD_FOLDER'] = os.path.join(current_dir, 'uploads')
 app.register_blueprint(followup_bp)
+
+init_db()
+
 
 # Global storage for sessions (MVP only - use DB in prod)
 session_store = {}
@@ -78,6 +86,25 @@ def chat():
     else:
         response_text = state["doctor_bot"].process_query(user_input)
 
+
+    # Persist to PostgreSQL
+    try:
+        session_obj = state["session"]
+        uid = session["user_id"]
+        # Save session FIRST (messages have foreign key dependency)
+        save_session(uid,
+            context_dict=session_obj.context,
+            medical_context=session_obj.context.get("medical_context"),
+            risk_level=session_obj.context.get("risk_level"),
+            mode=state["mode"])
+        save_message(uid, "patient", user_input)
+        save_message(uid, "system", response_text)
+        save_symptoms(uid,
+            session_obj.context["extracted_entities"]["symptoms"],
+            severity=session_obj.context["extracted_entities"].get("severity"))
+    except Exception as e:
+        print(f"[DB] Warning: {e}")
+
     return jsonify({"response": response_text, "mode": state["mode"]})
 
 @app.route('/uploads/<filename>')
@@ -109,6 +136,22 @@ def upload():
         response_text = state["patient_bot"].process_input("", image_path=filepath)
         print(f"DEBUG: Model Response: {response_text}")
         
+
+        # Persist image and prediction to PostgreSQL
+        try:
+            uid = session["user_id"]
+            session_obj = state["session"]
+            image_id = save_image(uid, file.filename, filepath,
+                image_type=session_obj.context.get("medical_context", "unknown"))
+            if session_obj.context.get("tumor_class"):
+                save_prediction(uid,
+                    model_used=session_obj.context.get("medical_context", "unknown"),
+                    predicted_class=session_obj.context["tumor_class"],
+                    confidence=session_obj.context.get("tumor_confidence", 0),
+                    image_id=image_id)
+        except Exception as e:
+            print(f"[DB] Image persist warning: {e}")
+
         return jsonify({"response": response_text, "mode": state["mode"]})
 
 @app.route('/api/switch_mode', methods=['POST'])
