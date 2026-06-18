@@ -103,9 +103,17 @@ class DoctorAgent:
                 )
                 if rag_retrieved:
                     rag_section = f"\nRELEVANT MEDICAL KNOWLEDGE FROM SYSTEM DATABASE:\n{rag_retrieved}\n"
+                else:
+                    rag_section = (
+                        "\nRELEVANT MEDICAL KNOWLEDGE FROM SYSTEM DATABASE:\n"
+                        "No specific reference documents matched this case. "
+                        "The assessment below is based on general medical knowledge only. "
+                        "Recommend consulting specialist literature for rare or atypical presentations.\n"
+                    )
             except Exception as _rag_err:
                 print(f"[DoctorAgent] ⚠️ RAG retrieval error: {_rag_err}")
         # ──────────────────────────────────────────────────────────────────
+
         symptoms = entities.get("symptoms", [])
         severity = entities.get("severity", "unknown")
         duration = entities.get("duration", "unknown")
