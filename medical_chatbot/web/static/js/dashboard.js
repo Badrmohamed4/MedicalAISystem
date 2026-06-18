@@ -9,6 +9,7 @@ async function updateStats() {
         animateNumber('total-sessions', data.total_sessions);
         animateNumber('brain-scans', data.brain_scans);
         animateNumber('lung-scans', data.lung_scans);
+        animateNumber('skin-scans', data.skin_scans || 0);
     } catch (error) {
         console.error('Failed to fetch stats:', error);
     }

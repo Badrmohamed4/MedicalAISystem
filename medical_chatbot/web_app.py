@@ -52,7 +52,7 @@ def get_agent_session():
             "mode": "patient" # Default mode
         }
         # Add initial greeting for new sessions
-        new_session.add_message("system", "Hello. I am your Medical Assistant. Please describe your symptoms or upload an MRI scan for analysis.")
+        new_session.add_message("system", "Hello. I am your Medical Assistant. Please describe your symptoms.")
     return session_store[uid]
 
 @app.route('/')
@@ -227,6 +227,7 @@ def get_stats():
     
     brain_scans = 0
     lung_scans = 0
+    skin_scans = 0
     
     for uid, state in session_store.items():
         ctx = state["session"].context
@@ -234,6 +235,8 @@ def get_stats():
             medical_ctx = ctx.get("medical_context", "brain")
             if medical_ctx == "lung":
                 lung_scans += 1
+            elif medical_ctx == "skin":
+                skin_scans += 1
             else:
                 brain_scans += 1
     
@@ -241,7 +244,8 @@ def get_stats():
         "active_users": active_users,
         "total_sessions": total_sessions,
         "brain_scans": brain_scans,
-        "lung_scans": lung_scans
+        "lung_scans": lung_scans,
+        "skin_scans": skin_scans
     })
 
 @app.route('/api/doctor/report/<uid>', methods=['GET'])
