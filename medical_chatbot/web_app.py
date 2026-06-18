@@ -26,7 +26,12 @@ app.secret_key = "secret_key_medical_chatbot_mvp"
 app.config['UPLOAD_FOLDER'] = os.path.join(current_dir, 'uploads')
 app.register_blueprint(followup_bp)
 
-init_db()
+_db_available = False
+try:
+    init_db()
+    _db_available = True
+except Exception as _db_err:
+    print(f"[DB] Warning: PostgreSQL not available — running without persistence. ({_db_err.__class__.__name__})")
 
 
 # Global storage for sessions (MVP only - use DB in prod)
@@ -88,28 +93,33 @@ def chat():
 
 
     # Persist to PostgreSQL
-    try:
-        session_obj = state["session"]
-        uid = session["user_id"]
-        # Save session FIRST (messages have foreign key dependency)
-        save_session(uid,
-            context_dict=session_obj.context,
-            medical_context=session_obj.context.get("medical_context"),
-            risk_level=session_obj.context.get("risk_level"),
-            mode=state["mode"])
-        save_message(uid, "patient", user_input)
-        save_message(uid, "system", response_text)
-        save_symptoms(uid,
-            session_obj.context["extracted_entities"]["symptoms"],
-            severity=session_obj.context["extracted_entities"].get("severity"))
-    except Exception as e:
-        print(f"[DB] Warning: {e}")
+    if _db_available:
+        try:
+            session_obj = state["session"]
+            uid = session["user_id"]
+            save_session(uid,
+                context_dict=session_obj.context,
+                medical_context=session_obj.context.get("medical_context"),
+                risk_level=session_obj.context.get("risk_level"),
+                mode=state["mode"])
+            save_message(uid, "patient", user_input)
+            save_message(uid, "system", response_text)
+            save_symptoms(uid,
+                session_obj.context["extracted_entities"]["symptoms"],
+                severity=session_obj.context["extracted_entities"].get("severity"))
+        except Exception as e:
+            print(f"[DB] Warning: {e}")
 
     return jsonify({"response": response_text, "mode": state["mode"]})
 
 @app.route('/uploads/<filename>')
 def serve_upload(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/followup_uploads/<filename>')
+def serve_followup_upload(filename):
+    followup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'followup_uploads')
+    return send_from_directory(followup_dir, filename)
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
@@ -138,19 +148,20 @@ def upload():
         
 
         # Persist image and prediction to PostgreSQL
-        try:
-            uid = session["user_id"]
-            session_obj = state["session"]
-            image_id = save_image(uid, file.filename, filepath,
-                image_type=session_obj.context.get("medical_context", "unknown"))
-            if session_obj.context.get("tumor_class"):
-                save_prediction(uid,
-                    model_used=session_obj.context.get("medical_context", "unknown"),
-                    predicted_class=session_obj.context["tumor_class"],
-                    confidence=session_obj.context.get("tumor_confidence", 0),
-                    image_id=image_id)
-        except Exception as e:
-            print(f"[DB] Image persist warning: {e}")
+        if _db_available:
+            try:
+                uid = session["user_id"]
+                session_obj = state["session"]
+                image_id = save_image(uid, file.filename, filepath,
+                    image_type=session_obj.context.get("medical_context", "unknown"))
+                if session_obj.context.get("tumor_class"):
+                    save_prediction(uid,
+                        model_used=session_obj.context.get("medical_context", "unknown"),
+                        predicted_class=session_obj.context["tumor_class"],
+                        confidence=session_obj.context.get("tumor_confidence", 0),
+                        image_id=image_id)
+            except Exception as e:
+                print(f"[DB] Image persist warning: {e}")
 
         return jsonify({"response": response_text, "mode": state["mode"]})
 
@@ -283,6 +294,30 @@ def get_doctor_report(uid):
     else:
         recommendation = "Continue home care. Seek help if symptoms worsen."
 
+    # Fetch followup reminders — keyed by session uid, same as followup store
+    fu_reminders = followup_store.get_reminders(uid)
+    print(f"[DEBUG REPORT] uid={uid[:8]}  reminders_found={len(fu_reminders)}")
+    for r in fu_reminders:
+        print(f"  → type={r['type']} title={r['title']} link={r.get('link')} scan={r.get('attached_upload')} status={r['status']}")
+
+    # Resolve scan filenames from upload store
+    def _get_upload_filename(upload_id):
+        for u in followup_store.get_uploads(uid):
+            if u["id"] == upload_id:
+                return u["filename"]
+        return None
+
+    followup_results = {
+        "lab_links":    [{"title": r["title"], "link": r["link"], "status": r["status"]}
+                         for r in fu_reminders if r.get("type") == "lab" and r.get("link")],
+        "scan_uploads": [{"title": r["title"], "date": r["date_time"],
+                          "upload_id": r.get("attached_upload"),
+                          "filename": _get_upload_filename(r.get("attached_upload")),
+                          "status": r["status"]}
+                         for r in fu_reminders if r.get("type") == "scan" and r.get("attached_upload")],
+        "completed":    bool(fu_reminders) and all(r["status"] == "done" for r in fu_reminders)
+    }
+
     report = {
         "patient_id": ctx.get("patient_id", "Unknown"),
         "session_id": uid,
@@ -300,7 +335,8 @@ def get_doctor_report(uid):
         "recommendation": recommendation,
         "conversation": conversation,
         "question_answers": ctx.get("question_answers", {}),
-        "followup_plan": ctx.get("doctor_followup_plan", None)
+        "followup_plan": ctx.get("doctor_followup_plan", None),
+        "followup_results": followup_results
     }
 
     return jsonify({"report": report})
