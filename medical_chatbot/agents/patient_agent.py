@@ -365,6 +365,25 @@ class PatientAgent:
     # ------------------------------------------------------------------ #
     #  INTENT HANDLER                                                      #
     # ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
+    #  RAG RETRIEVAL HELPER                                                #
+    # ------------------------------------------------------------------ #
+    def _retrieve_rag(self, user_text="") -> str:
+        """Retrieve RAG context based on current session symptoms and domain."""
+        if not _rag:
+            return ""
+        try:
+            symptoms = self.session.context["extracted_entities"]["symptoms"]
+            context = self.session.context.get("medical_context", "unknown")
+            query = f"{' '.join(symptoms)} {context} {user_text}".strip()
+            retrieved = _rag.retrieve(query, domain_filter=context)
+            if retrieved:
+                print(f"[Agent] ✅ RAG retrieved context for domain={context}")
+            return retrieved or ""
+        except Exception as e:
+            print(f"[Agent] ⚠️ RAG retrieval error: {e}")
+            return ""
+
     def _handle_intent(self, intent, entities, text):
         response = ""
 
@@ -387,6 +406,9 @@ class PatientAgent:
                     answered.append(next_q)
                     self.session.update_context("answered_questions", answered)
                     self.session.update_context("last_asked_question", next_q)
+
+                    # RAG: retrieve and log relevant context (informs future Ollama calls)
+                    self._retrieve_rag(text)
 
                     # Build a natural acknowledgement
                     response = f"I understand. To better assess your condition: {next_q}"
@@ -660,6 +682,14 @@ class PatientAgent:
         risk, risk_msg = self.decision_engine.evaluate_text_risk(self.session)
         self.session.update_context("risk_level", risk)
 
+        # ── RAG RETRIEVAL ──────────────────────────────────────────────────
+        rag_note = ""
+        rag_retrieved = self._retrieve_rag()
+        if rag_retrieved:
+            # Append a brief RAG-sourced note to the assessment
+            rag_note = f"\n\n📚 **Relevant Information**:\n{rag_retrieved}"
+        # ──────────────────────────────────────────────────────────────────
+
         symptoms_str = ", ".join(symptoms)
 
         response = "📋 **Preliminary Assessment**\n\n"
@@ -668,6 +698,7 @@ class PatientAgent:
         response += f"**Severity**: {severity or 'Not determined'}\n"
         response += f"**Risk level**: {risk}\n\n"
         response += risk_msg
+        response += rag_note
         response += "\n\nFor a more accurate diagnosis, please upload a medical scan using the 📷 button."
 
         return response
@@ -681,6 +712,14 @@ class PatientAgent:
         Falls back to direct Ollama if pipeline unavailable.
         Also updates session context with pipeline results.
         """
+        # ── RAG RETRIEVAL (runs for all paths) ────────────────────────────
+        rag_retrieved = self._retrieve_rag(user_text)
+        rag_section = (
+            f"\nRELEVANT MEDICAL REFERENCE:\n{rag_retrieved}\n"
+            if rag_retrieved else ""
+        )
+        # ──────────────────────────────────────────────────────────────────
+
         # --- Try LangGraph pipeline first ---
         if _langgraph_pipeline:
             try:
@@ -688,6 +727,7 @@ class PatientAgent:
                     "last_response": self.session.history[-1]["content"] if self.session.history else "",
                     "medical_context": self.session.context.get("medical_context", "none"),
                     "symptoms": self.session.context["extracted_entities"].get("symptoms", []),
+                    "rag_context": rag_retrieved,  # pass RAG context into pipeline
                 }
                 result = _langgraph_pipeline(user_text, session_context=session_ctx)
 
@@ -718,18 +758,6 @@ class PatientAgent:
 
         symptoms = self.session.context["extracted_entities"]["symptoms"]
         context = self.session.context.get("medical_context", "unknown")
-
-        # ── RAG RETRIEVAL ──────────────────────────────────────────────────
-        rag_section = ""
-        if _rag:
-            try:
-                query = f"{' '.join(symptoms)} {context} {user_text}".strip()
-                retrieved = _rag.retrieve(query, domain_filter=context)
-                if retrieved:
-                    rag_section = f"\nRELEVANT MEDICAL REFERENCE:\n{retrieved}\n"
-            except Exception as _rag_err:
-                print(f"[Agent] ⚠️ RAG retrieval error: {_rag_err}")
-        # ──────────────────────────────────────────────────────────────────
 
         system_prompt = (
             "You are a medical AI chatbot. The patient's known info:\n"
