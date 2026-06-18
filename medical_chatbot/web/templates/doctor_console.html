@@ -550,6 +550,55 @@
                         }
                     }
 
+                    // ---- Follow-Up Results section ----
+                    let fuHtml = '';
+                    const fu = r.followup_results;
+                    if (fu) {
+                        const statusBadge = (s) => {
+                            const cls = s === 'done' ? 'success' : s === 'overdue' ? 'danger' : 'warning';
+                            return `<span class="report-value ${cls}" style="font-size:0.75rem;padding:0.2rem 0.6rem;border-radius:20px">${s.toUpperCase()}</span>`;
+                        };
+
+                        // Lab links
+                        let labRows = fu.lab_links.length
+                            ? fu.lab_links.map(l => `
+                                <div class="report-row" style="align-items:center">
+                                    <span class="report-label">🧪 ${l.title}</span>
+                                    <span class="report-value">
+                                        <a href="${l.link}" target="_blank" rel="noopener" style="color:var(--primary);word-break:break-all">${l.link}</a>
+                                        &nbsp;${statusBadge(l.status)}
+                                    </span>
+                                </div>`).join('')
+                            : '<span style="color:var(--text-dim);font-size:0.85rem">No lab results submitted yet.</span>';
+
+                        // Follow-up scans
+                        let scanRows = fu.scan_uploads.length
+                            ? fu.scan_uploads.map(s => `
+                                <div class="report-row" style="align-items:center">
+                                    <span class="report-label">🩻 ${s.title}</span>
+                                    <span class="report-value">
+                                        Uploaded on ${s.date || '—'}
+                                        &nbsp;${statusBadge(s.status)}
+                                    </span>
+                                </div>`).join('')
+                            : '<span style="color:var(--text-dim);font-size:0.85rem">No follow-up scan uploaded yet.</span>';
+
+                        // Overall completion badge
+                        const completionBadge = fu.completed
+                            ? `<div style="margin-bottom:1rem;padding:0.6rem 1rem;background:#E8F5E9;border-radius:10px;color:#2E7D32;font-weight:600;font-size:0.85rem">✅ Patient completed all follow-up tasks</div>`
+                            : '';
+
+                        fuHtml = `
+                            <div class="report-section">
+                                <div class="report-section-title">Follow-Up Results</div>
+                                ${completionBadge}
+                                <div style="margin-bottom:0.5rem;font-size:0.8rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Lab Tests</div>
+                                ${labRows}
+                                <div style="margin:1rem 0 0.5rem;font-size:0.8rem;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em">Follow-Up Scans</div>
+                                ${scanRows}
+                            </div>`;
+                    }
+
                     body.innerHTML = `
                         <div class="report-section">
                             <div class="report-section-title">Patient Information</div>
@@ -588,6 +637,8 @@
                             <div class="report-section-title">Conversation History</div>
                             <div style="max-height:200px;overflow-y:auto;padding:0.5rem;background:#F8F9FC;border-radius:12px">${chatHtml}</div>
                         </div>
+
+                        ${fuHtml}
                     `;
                 } catch(err) {
                     body.innerHTML = `<p style="color:var(--danger)">Error loading report: ${err.message}</p>`;

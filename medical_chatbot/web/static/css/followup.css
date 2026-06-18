@@ -210,7 +210,11 @@
     transform: translateY(-2px);
 }
 
-.fu-card.fu-done { opacity: 0.5; }
+.fu-card.fu-done {
+    opacity: 0.6;
+    background: #F1FBF1;
+    border-color: #A5D6A7;
+}
 
 .fu-card-icon {
     font-size: 1.6rem;
@@ -317,6 +321,50 @@
     outline: none;
 }
 .fu-card-link-form input:focus { border-color: var(--primary); }
+
+/* ---- All Done Screen ---- */
+.fu-all-done {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.fu-all-done-icon {
+    font-size: 3.5rem;
+    margin-bottom: 1rem;
+}
+
+.fu-all-done h3 {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.4rem;
+    color: var(--text-main);
+    margin-bottom: 0.6rem;
+}
+
+.fu-all-done p {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+    line-height: 1.6;
+}
+
+.fu-back-btn {
+    padding: 0.85rem 2.5rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Outfit', sans-serif;
+}
+
+.fu-back-btn:hover {
+    background: var(--primary-dark, #5a4dc4);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(108,93,211,0.3);
+}
 
 /* ---- Empty State ---- */
 .fu-empty {

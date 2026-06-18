@@ -153,7 +153,7 @@
             }
 
             return `
-            <div class="fu-card ${r.status === 'done' ? 'fu-done' : ''}">
+            <div class="fu-card ${r.status === 'done' ? 'fu-done' : ''}" id="card-${r.id}">
                 <div class="fu-card-icon">${icon}</div>
                 <div class="fu-card-body">
                     <div class="fu-card-title">${r.title}</div>
@@ -172,8 +172,37 @@
     }
 
     async function markDone(rid) {
-        await fetch(`/api/followup/reminders/${rid}/done`, {method: 'POST'});
-        openPatient(currentPid);
+        // Visual flash — turn card green instantly
+        const card = document.getElementById('card-' + rid);
+        if (card) {
+            card.style.transition = 'background 0.3s ease, border-color 0.3s ease';
+            card.style.background = '#E8F5E9';
+            card.style.borderColor = '#4CAF50';
+        }
+
+        await fetch(`/api/followup/reminders/${rid}/done`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({patient_id: currentPid})
+        });
+
+        const res  = await fetch('/api/followup/patient/' + currentPid + '/reminders');
+        const data = await res.json();
+        const allDone = data.reminders.length > 0 && data.reminders.every(r => r.status === 'done');
+
+        if (allDone) {
+            document.getElementById('modal-reminders-list').innerHTML = `
+                <div class="fu-all-done">
+                    <div class="fu-all-done-icon">✅</div>
+                    <h3>All Follow-Ups Completed!</h3>
+                    <p>Great job! All your reminders are done.<br>Your doctor will review your progress.</p>
+                    <button class="fu-back-btn" onclick="window.location.href='/doctor'">
+                        🩺 Back to Doctor
+                    </button>
+                </div>`;
+        } else {
+            renderReminders(data.reminders);
+        }
     }
 
     async function saveReminderLink(rid) {
@@ -183,7 +212,7 @@
         await fetch(`/api/followup/reminders/${rid}/link`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({link})
+            body: JSON.stringify({link, patient_id: currentPid})
         });
         openPatient(currentPid);
     }
@@ -192,9 +221,9 @@
         if (!input.files.length) return;
         const formData = new FormData();
         formData.append('file', input.files[0]);
+        formData.append('patient_id', currentPid);   // pass patient_id explicitly
         await fetch(`/api/followup/reminders/${rid}/scan`, {method: 'POST', body: formData});
-        alert('Scan uploaded and sent to doctor!');
-        openPatient(currentPid);
+        openPatient(currentPid);   // refresh — scan auto-marks done
     }
 
     // Close modal on overlay click
