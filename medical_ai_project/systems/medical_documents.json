@@ -1,0 +1,17 @@
+[
+  {"text": "Gliomas are tumors that arise from glial cells in the brain or spinal cord. Symptoms include headaches, seizures, cognitive changes. Treatment: surgery, radiation, chemotherapy.", "tags": ["brain", "glioma", "tumor"], "source": "BRAIN_TUMOR_INFO"},
+  {"text": "Meningiomas form on the membranes covering the brain and spinal cord. Usually slow-growing and benign. Managed by observation or surgical removal.", "tags": ["brain", "meningioma"], "source": "BRAIN_TUMOR_INFO"},
+  {"text": "Pituitary adenomas develop in the pituitary gland. Can disrupt hormone regulation and cause vision problems. Most are benign and treatable.", "tags": ["brain", "pituitary"], "source": "BRAIN_TUMOR_INFO"},
+  {"text": "Adenocarcinoma is the most common lung cancer, found in outer lung regions. Starts in mucus-producing cells. Early detection improves prognosis.", "tags": ["lung", "adenocarcinoma"], "source": "LUNG_CANCER_INFO"},
+  {"text": "Large cell carcinoma grows and spreads quickly, making it harder to treat. Immediate oncology consultation recommended.", "tags": ["lung", "large cell carcinoma"], "source": "LUNG_CANCER_INFO"},
+  {"text": "Squamous cell carcinoma develops in airway lining cells, usually central lungs. Linked to smoking history. May cause coughing up blood.", "tags": ["lung", "squamous cell carcinoma"], "source": "LUNG_CANCER_INFO"},
+  {"text": "Melanoma is a serious skin cancer beginning in melanocytes. Requires immediate dermatologist/oncologist assessment and biopsy.", "tags": ["skin", "malignant", "melanoma"], "source": "SKIN_DISEASE_INFO"},
+  {"text": "Psoriasis is a chronic autoimmune skin disease causing itchy, scaly patches on knees, elbows, trunk, scalp. Treatments: ointments, light therapy, systemic medications.", "tags": ["skin", "psoriasis"], "source": "SKIN_DISEASE_INFO"},
+  {"text": "Eczema (atopic dermatitis) causes red, itchy skin. Chronic and flares periodically. Management: avoid harsh soaps, moisturize, medicated creams.", "tags": ["skin", "eczema"], "source": "SKIN_DISEASE_INFO"},
+  {"text": "Acne occurs when hair follicles plug with oil and dead skin. Treated with topical creams, cleansers, or prescription medications.", "tags": ["skin", "acne"], "source": "SKIN_DISEASE_INFO"},
+  {"text": "For high-risk patients: seek immediate ER attention. Do not drive yourself. Call emergency services. Have someone stay with you.", "tags": ["emergency", "high risk"], "source": "EMERGENCY_ADVICE"},
+  {"text": "Seizure first aid: lay person on their side, keep airway open, remove hazards, do NOT restrain or put objects in mouth. Time the seizure; call emergency if >5 minutes.", "tags": ["brain", "seizure", "emergency"], "source": "BRAIN_ADVICE"},
+  {"text": "Headache management: apply cold/warm compress, dim lights, minimize screens, try relaxation techniques, hydrate, rest in dark room.", "tags": ["brain", "headache", "care"], "source": "BRAIN_ADVICE"},
+  {"text": "Lung issue precautions: avoid smoke/dust/chemical fumes, use humidifier, sleep with head elevated, monitor oxygen levels with pulse oximeter.", "tags": ["lung", "care"], "source": "LUNG_ADVICE"},
+  {"text": "Skin issue precautions: avoid scratching, wash gently with mild cleanser, apply moisturizer, protect from direct sunlight.", "tags": ["skin", "care"], "source": "SKIN_ADVICE"}
+]
