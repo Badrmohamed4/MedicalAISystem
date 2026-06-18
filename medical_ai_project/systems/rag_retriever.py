@@ -26,7 +26,7 @@ class SapBERTMedicalRAG:
     Reuses the same model loaded by SapBERTNormalizer.
     """
 
-    def __init__(self, top_k=2, similarity_threshold=0.25, domain_boost=1.5):
+    def __init__(self, top_k=2, similarity_threshold=0.55, domain_boost=1.5):
         self.top_k = top_k
         self.similarity_threshold = similarity_threshold
         self.domain_boost = domain_boost
@@ -115,32 +115,37 @@ class SapBERTMedicalRAG:
         return self._keyword_retrieve(query, domain_filter)
 
     def _dense_retrieve(self, query: str, domain_filter: str = None) -> str:
-        """Dense vector retrieval using SapBERT embeddings."""
-        query_embedding = self._model.encode([query], convert_to_numpy=True)
+     """Dense vector retrieval using SapBERT embeddings."""
+     query_embedding = self._model.encode([query], convert_to_numpy=True)
 
-        # Cosine similarity (SapBERT outputs normalized vectors)
-        similarities = np.dot(self.embeddings, query_embedding.T).flatten()
+     # Cosine similarity (SapBERT outputs normalized vectors)
+     similarities = np.dot(self.embeddings, query_embedding.T).flatten()
 
-        # Domain boosting
-        if domain_filter and domain_filter.lower() not in ["unknown", "none", "general"]:
-            df_lower = domain_filter.lower()
-            for i, doc in enumerate(self.documents):
-                tags = [t.lower() for t in doc.get("tags", [])]
-                if df_lower in tags:
-                    similarities[i] *= self.domain_boost
+     # Domain boosting
+     if domain_filter and domain_filter.lower() not in ["unknown", "none", "general"]:
+         df_lower = domain_filter.lower()
+         for i, doc in enumerate(self.documents):
+             tags = [t.lower() for t in doc.get("tags", [])]
+             if df_lower in tags:
+                 similarities[i] *= self.domain_boost
 
-        # Get top-k
-        top_indices = np.argsort(similarities)[-self.top_k:][::-1]
+     # Get top-k
+     top_indices = np.argsort(similarities)[-self.top_k:][::-1]
 
-        retrieved = []
-        for idx in top_indices:
-            if similarities[idx] >= self.similarity_threshold:
-                doc = self.documents[idx]
-                source = doc.get("source", "MEDICAL_KB")
-                text = doc["text"]
-                retrieved.append(f"[{source}] {text}")
+     retrieved = []
+     for idx in top_indices:
+         if similarities[idx] >= self.similarity_threshold:
+             doc = self.documents[idx]
+             source = doc.get("source", "MEDICAL_KB")
+             text = doc["text"]
+             retrieved.append(f"[{source}] {text}")
 
-        return "\n\n".join(retrieved) if retrieved else ""
+     # ── NO-MATCH FALLBACK ──
+     if not retrieved:
+         print(f"[RAG] ⚠️ No documents matched threshold ({self.similarity_threshold}) for query: '{query[:50]}...'")
+         return ""
+
+     return "\n\n".join(retrieved)
 
     def _keyword_retrieve(self, query: str, domain_filter: str = None) -> str:
         """Fallback keyword-based retrieval if SapBERT fails."""

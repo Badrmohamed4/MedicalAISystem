@@ -683,11 +683,18 @@ class PatientAgent:
         self.session.update_context("risk_level", risk)
 
         # ── RAG RETRIEVAL ──────────────────────────────────────────────────
+         
         rag_note = ""
         rag_retrieved = self._retrieve_rag()
         if rag_retrieved:
-            # Append a brief RAG-sourced note to the assessment
             rag_note = f"\n\n📚 **Relevant Information**:\n{rag_retrieved}"
+        else:
+            rag_note = (
+                "\n\n📚 **Relevant Information**:\n"
+                "No specific reference documents matched this case. "
+                "The assessment below is based on general medical knowledge only."
+            )
+        # 
         # ──────────────────────────────────────────────────────────────────
 
         symptoms_str = ", ".join(symptoms)
@@ -714,10 +721,15 @@ class PatientAgent:
         """
         # ── RAG RETRIEVAL (runs for all paths) ────────────────────────────
         rag_retrieved = self._retrieve_rag(user_text)
-        rag_section = (
-            f"\nRELEVANT MEDICAL REFERENCE:\n{rag_retrieved}\n"
-            if rag_retrieved else ""
-        )
+        if rag_retrieved:
+            rag_section = f"\nRELEVANT MEDICAL REFERENCE:\n{rag_retrieved}\n"
+        else:
+            rag_section = (
+                "\nRELEVANT MEDICAL REFERENCE:\n"
+                "No specific reference documents were found for this query. "
+                "Provide general medical guidance and recommend consulting a healthcare professional.\n"
+            )
+        # ──────────────────────────────────────────────────────────────────
         # ──────────────────────────────────────────────────────────────────
 
         # --- Try LangGraph pipeline first ---
