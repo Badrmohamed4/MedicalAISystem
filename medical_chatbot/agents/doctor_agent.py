@@ -3,8 +3,9 @@ import sys
 
 from medical_chatbot.systems.report_generator import ReportGenerator
 
-# Load Ollama client
+# Load Ollama client and RAG retriever
 _ollama_client = None
+_rag = None
 try:
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     sys.path.insert(0, os.path.join(project_root, "medical_ai_project"))
@@ -13,6 +14,15 @@ try:
     print("[DoctorAgent] ✅ Ollama client loaded for AI assessment.")
 except Exception as e:
     print(f"[DoctorAgent] ⚠️ Ollama unavailable: {e}")
+
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.join(project_root, "medical_ai_project"))
+    from systems.rag_retriever import get_rag
+    _rag = get_rag()
+    print("[DoctorAgent] ✅ RAG retriever loaded.")
+except Exception as e:
+    print(f"[DoctorAgent] ⚠️ RAG retriever unavailable: {e}")
 
 
 class DoctorAgent:
@@ -81,6 +91,21 @@ class DoctorAgent:
 
         ctx = self.session.context
         entities = ctx.get("extracted_entities", {})
+
+        # ── RAG RETRIEVAL ──────────────────────────────────────────────────
+        rag_section = ""
+        if _rag:
+            try:
+                rag_retrieved = _rag.retrieve_for_assessment(
+                    symptoms=entities.get("symptoms", []),
+                    medical_context=ctx.get("medical_context", "unknown"),
+                    tumor_class=ctx.get("tumor_class"),
+                )
+                if rag_retrieved:
+                    rag_section = f"\nRELEVANT MEDICAL KNOWLEDGE FROM SYSTEM DATABASE:\n{rag_retrieved}\n"
+            except Exception as _rag_err:
+                print(f"[DoctorAgent] ⚠️ RAG retrieval error: {_rag_err}")
+        # ──────────────────────────────────────────────────────────────────
         symptoms = entities.get("symptoms", [])
         severity = entities.get("severity", "unknown")
         duration = entities.get("duration", "unknown")
@@ -102,8 +127,8 @@ Patient Data:
 - Follow-up Q&A: {str(question_answers) if question_answers else 'None'}
 """
 
-        system_prompt = """You are an experienced medical AI assistant helping a doctor review a patient case.
-Based on the patient data provided, generate a brief clinical assessment covering:
+        system_prompt = f"""You are an experienced medical AI assistant helping a doctor review a patient case.
+{rag_section}Based on the patient data provided, generate a brief clinical assessment covering:
 1. Most likely condition or differential diagnosis (2-3 possibilities)
 2. Key clinical concerns based on symptoms and risk level
 3. Recommended next steps (tests, referrals, monitoring)
@@ -117,7 +142,7 @@ IMPORTANT RULES:
 - Format with clear numbered sections
 """
 
-        print("\n[DoctorAgent] Generating AI clinical assessment...")
+        print("\n[DoctorAgent] Generating RAG-enhanced AI clinical assessment...")
         parts = []
         for chunk in _ollama_client.stream_chat(system_prompt, patient_summary):
             parts.append(chunk)
@@ -132,5 +157,5 @@ IMPORTANT RULES:
 {assessment}
 ============================================================
 """
-        print("[DoctorAgent] ✅ AI assessment generated.")
+        print("[DoctorAgent] ✅ RAG-enhanced AI assessment generated.")
         return result

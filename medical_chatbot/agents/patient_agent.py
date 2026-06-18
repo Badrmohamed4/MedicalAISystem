@@ -15,6 +15,17 @@ try:
 except Exception as e:
     print(f"[Agent] ⚠️ Ollama unavailable for responses: {e}")
 
+# Import RAG retriever
+_rag = None
+try:
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, os.path.join(project_root, "medical_ai_project"))
+    from systems.rag_retriever import get_rag
+    _rag = get_rag()
+    print("[Agent] ✅ RAG retriever loaded.")
+except Exception as e:
+    print(f"[Agent] ⚠️ RAG retriever unavailable: {e}")
+
 # LangGraph pipeline
 _langgraph_pipeline = None
 try:
@@ -708,11 +719,25 @@ class PatientAgent:
         symptoms = self.session.context["extracted_entities"]["symptoms"]
         context = self.session.context.get("medical_context", "unknown")
 
+        # ── RAG RETRIEVAL ──────────────────────────────────────────────────
+        rag_section = ""
+        if _rag:
+            try:
+                query = f"{' '.join(symptoms)} {context} {user_text}".strip()
+                retrieved = _rag.retrieve(query, domain_filter=context)
+                if retrieved:
+                    rag_section = f"\nRELEVANT MEDICAL REFERENCE:\n{retrieved}\n"
+            except Exception as _rag_err:
+                print(f"[Agent] ⚠️ RAG retrieval error: {_rag_err}")
+        # ──────────────────────────────────────────────────────────────────
+
         system_prompt = (
             "You are a medical AI chatbot. The patient's known info:\n"
             f"- Medical area: {context}\n"
             f"- Known symptoms: {', '.join(symptoms) if symptoms else 'none yet'}\n"
+            f"{rag_section}"
             "You help with brain tumors, lung cancer, and skin diseases.\n"
+            "If the medical reference above is relevant, use it to inform your response — but never directly quote it verbatim to the patient.\n"
             "Respond in 2-3 sentences max. Ask about their symptoms. Be empathetic."
         )
 
