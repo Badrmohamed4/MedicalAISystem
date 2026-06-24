@@ -75,6 +75,23 @@ class DoctorAgent:
         ai_assessment = self._generate_ai_assessment()
         full = structured + "\n" + ai_assessment
         self.session.update_context("generated_report", full)
+
+        # Persist to PostgreSQL reports table
+        try:
+            from medical_chatbot.database.db_manager import save_report
+            ctx = self.session.context
+            entities = ctx.get("extracted_entities", {})
+            save_report(
+                session_id=self.session.session_id,
+                structured_report=structured,
+                ai_assessment=ai_assessment,
+                risk_level=ctx.get("risk_level", "Unknown"),
+                symptoms_snapshot=entities.get("symptoms", [])
+            )
+            print("[DoctorAgent] Report saved to PostgreSQL.")
+        except Exception as _save_err:
+            print(f"[DoctorAgent] Could not save report to DB: {_save_err}")
+
         return full
 
     # ------------------------------------------------------------------ #

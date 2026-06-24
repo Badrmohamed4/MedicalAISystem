@@ -98,6 +98,8 @@ class PatientAgent:
             # the already-accumulated entities and medical context.
             if text.strip():
                 self.session.update_context("extracted_entities", entities)
+                self.session.update_context("normalized_map",
+                    entities.get("normalized_map", {}))
 
                 # AI-driven medical context detection
                 ai_context = entities.get("medical_context", "none")

@@ -65,6 +65,7 @@ class EntityExtractor:
         severity = None
         duration = None
         medical_context = "none"
+        normalized_map = {}
 
         if _nlp_processor_instance:
             try:
@@ -75,6 +76,11 @@ class EntityExtractor:
                 # Normalized needed for clinical display (terms like "vertigo")
                 original = list(nlp_result.get("original_symptoms", []))
                 normalized = list(nlp_result.get("normalized_symptoms", []))
+                # Build raw->normalized map before set-merge loses the pairing
+                for i, raw in enumerate(original):
+                    if i < len(normalized):
+                        normalized_map[raw] = normalized[i]
+
                 found_symptoms = list(set(original + normalized))
                     
                 severity = nlp_result.get("severity")
@@ -87,5 +93,6 @@ class EntityExtractor:
             "symptoms": found_symptoms,
             "severity": severity,
             "duration": duration,
-            "medical_context": medical_context
+            "medical_context": medical_context,
+            "normalized_map": normalized_map
         }

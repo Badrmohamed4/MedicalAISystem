@@ -50,7 +50,8 @@
             <div class="chat-container">
                 <header class="chat-header">
                     <div class="chat-title">
-                        <h2>Patient Assistant</h2>
+                        <button class="history-toggle-btn" onclick="toggleHistorySidebar()" title="Conversation History">&#9776;</button>
+                    <h2>Patient Assistant</h2>
                     </div>
                 </header>
 
@@ -89,6 +90,24 @@
     </div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+<div class="history-overlay" id="history-overlay" onclick="toggleHistorySidebar()"></div>
+<div class="history-sidebar" id="history-sidebar">
+  <div class="history-header">
+    <span class="history-title">&#128172; Conversations</span>
+    <button class="history-close-btn" onclick="toggleHistorySidebar()">&#10005;</button>
+  </div>
+  <button class="new-conv-btn" onclick="startNewConversation()">&#43; New Conversation</button>
+  <div class="history-search">
+    <input type="text" id="conv-search" placeholder="Search conversations..." oninput="filterConversations(this.value)"/>
+  </div>
+  <div class="history-list" id="history-list">
+    <div class="history-loading">Loading conversations...</div>
+  </div>
+  <div class="history-footer">
+    <a href="/logout" class="logout-link">&#x2192; Sign Out</a>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/conversations.js') }}"></script>
 </body>
 
 </html>

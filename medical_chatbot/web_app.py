@@ -2,11 +2,17 @@ import os
 import sys
 import uuid
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, session, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, send_from_directory, redirect, url_for
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
 from medical_chatbot.followup.routes import followup_bp
 from medical_chatbot.database.db_manager import (
     init_db, save_session, save_message, save_symptoms,
-    save_image, save_prediction
+    save_image, save_prediction, save_report,
+    register_patient, get_patient_by_username,
+    get_conversations, get_conversation_messages,
+    rename_conversation, delete_conversation,
+    link_session_to_patient, update_conversation_title
 )
 
 from medical_chatbot.followup import store as followup_store
@@ -22,7 +28,7 @@ from medical_chatbot.agents.patient_agent import PatientAgent
 from medical_chatbot.agents.doctor_agent import DoctorAgent
 
 app = Flask(__name__, template_folder="web/templates", static_folder="web/static")
-app.secret_key = "secret_key_medical_chatbot_mvp"
+app.secret_key = os.urandom(24)
 app.config['UPLOAD_FOLDER'] = os.path.join(current_dir, 'uploads')
 app.register_blueprint(followup_bp)
 
@@ -37,6 +43,15 @@ except Exception as _db_err:
 # Global storage for sessions (MVP only - use DB in prod)
 session_store = {}
 
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('patient_id'):
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated
+
 def get_agent_session():
     if 'user_id' not in session:
         session['user_id'] = str(uuid.uuid4())
@@ -49,21 +64,74 @@ def get_agent_session():
             "session": new_session,
             "patient_bot": PatientAgent(new_session),
             "doctor_bot": DoctorAgent(new_session),
-            "mode": "patient" # Default mode
+            "mode": "patient",
+            "title": "New Conversation"
         }
         # Add initial greeting for new sessions
         new_session.add_message("system", "Hello. I am your Medical Assistant. Please describe your symptoms.")
+        # Link session to logged-in patient in DB
+        if session.get('patient_id') and _db_available:
+            try:
+                link_session_to_patient(uid, session['patient_id'])
+            except Exception:
+                pass
     return session_store[uid]
 
+@app.route('/login', methods=['GET', 'POST'])
+def login_page():
+    if session.get('patient_id'):
+        return redirect(url_for('dashboard'))
+    if request.method == 'GET':
+        return render_template('login.html')
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+    patient = get_patient_by_username(username)
+    if not patient or not check_password_hash(patient['password_hash'], password):
+        return render_template('login.html', error='Incorrect username or password.', active_tab='login')
+    session['patient_id'] = patient['patient_id']
+    session['patient_name'] = patient['full_name']
+    session['username'] = patient['username']
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/register', methods=['POST'])
+def register_page():
+    full_name        = request.form.get('full_name', '').strip()
+    username         = request.form.get('username', '').strip()
+    national_id      = request.form.get('national_id', '').strip()
+    password         = request.form.get('password', '').strip()
+    confirm_password = request.form.get('confirm_password', '').strip()
+    if not all([full_name, username, national_id, password, confirm_password]):
+        return render_template('login.html', error='All fields are required.', active_tab='register')
+    if password != confirm_password:
+        return render_template('login.html', error='Passwords do not match.', active_tab='register')
+    if len(national_id) != 14 or not national_id.isdigit():
+        return render_template('login.html', error='National ID must be exactly 14 digits.', active_tab='register')
+    hashed = generate_password_hash(password)
+    ok = register_patient(full_name, username, national_id, hashed)
+    if not ok:
+        return render_template('login.html', error='Username or National ID already registered.', active_tab='register')
+    return render_template('login.html', success='Account created! You can now sign in.', active_tab='login')
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login_page'))
+
+
 @app.route('/')
+@login_required
 def dashboard():
     return render_template('dashboard.html')
 
 @app.route('/chat')
+@login_required
 def chat_interface():
     return render_template('index.html')
 
 @app.route('/doctor')
+@login_required
 def doctor_console():
     # Pass session store to template to render active reports
     return render_template('doctor_console.html', sessions=session_store)
@@ -103,10 +171,20 @@ def chat():
                 risk_level=session_obj.context.get("risk_level"),
                 mode=state["mode"])
             save_message(uid, "patient", user_input)
+            if _db_available and session.get('patient_id'):
+                try:
+                    title = user_input.strip()[:60]
+                    update_conversation_title(uid, title)
+                    session_store[uid]['title'] = title
+                except Exception:
+                    pass
             save_message(uid, "system", response_text)
+            raw_symptoms = session_obj.context["extracted_entities"]["symptoms"]
+            norm_map = session_obj.context.get("normalized_map", {})
             save_symptoms(uid,
-                session_obj.context["extracted_entities"]["symptoms"],
-                severity=session_obj.context["extracted_entities"].get("severity"))
+                raw_symptoms,
+                severity=session_obj.context["extracted_entities"].get("severity"),
+                normalized_map=norm_map)
         except Exception as e:
             print(f"[DB] Warning: {e}")
 
@@ -322,6 +400,25 @@ def get_doctor_report(uid):
         "completed":    bool(fu_reminders) and all(r["status"] == "done" for r in fu_reminders)
     }
 
+    # Persist report to PostgreSQL (safe — skips if already saved this session)
+    try:
+        from medical_chatbot.database.db_manager import save_report
+        save_report(
+            session_id=uid,
+            structured_report=str({
+                "symptoms": entities.get("symptoms", []),
+                "severity": entities.get("severity"),
+                "duration": entities.get("duration"),
+                "medical_context": ctx.get("medical_context", "Not specified")
+            }),
+            ai_assessment=recommendation,
+            risk_level=risk,
+            symptoms_snapshot=entities.get("symptoms", [])
+        )
+        print("[DoctorRoute] Report saved to PostgreSQL.")
+    except Exception as _e:
+        print(f"[DoctorRoute] Could not save report: {_e}")
+
     report = {
         "patient_id": ctx.get("patient_id", "Unknown"),
         "session_id": uid,
@@ -401,3 +498,74 @@ if __name__ == '__main__':
         os.makedirs(app.config['UPLOAD_FOLDER'])
     # Disable reloader to prevent TensorFlow mutex lock errors on macOS
     app.run(debug=True, port=5001, use_reloader=False)
+
+@app.route('/api/conversations', methods=['GET'])
+@login_required
+def list_conversations():
+    patient_id = session.get('patient_id')
+    try:
+        convs = get_conversations(patient_id)
+        for c in convs:
+            c['created_at'] = c['created_at'].strftime('%Y-%m-%d %H:%M') if c.get('created_at') else ''
+            c['updated_at'] = c['updated_at'].strftime('%Y-%m-%d %H:%M') if c.get('updated_at') else ''
+        return jsonify({'conversations': convs})
+    except Exception as e:
+        return jsonify({'conversations': [], 'error': str(e)})
+
+
+@app.route('/api/conversations/<conv_id>', methods=['GET'])
+@login_required
+def load_conversation(conv_id):
+    patient_id = session.get('patient_id')
+    messages = get_conversation_messages(conv_id, patient_id)
+    if messages is None:
+        return jsonify({'error': 'Conversation not found'}), 404
+    if conv_id not in session_store:
+        restored = Session(conv_id)
+        for m in messages:
+            restored.add_message(m['role'], m['content'], m.get('mode', 'patient'))
+        session_store[conv_id] = {
+            'session': restored,
+            'patient_bot': PatientAgent(restored),
+            'doctor_bot': DoctorAgent(restored),
+            'mode': 'patient',
+            'title': 'Restored Conversation'
+        }
+    session['user_id'] = conv_id
+    formatted = [{'role': m['role'], 'content': m['content'], 'mode': m.get('mode', 'patient')} for m in messages]
+    return jsonify({'history': formatted, 'session_id': conv_id})
+
+
+@app.route('/api/conversations/<conv_id>/rename', methods=['POST'])
+@login_required
+def rename_conv(conv_id):
+    patient_id = session.get('patient_id')
+    data = request.json or {}
+    new_title = data.get('title', '').strip()
+    if not new_title:
+        return jsonify({'error': 'Title cannot be empty'}), 400
+    ok = rename_conversation(conv_id, patient_id, new_title)
+    if conv_id in session_store:
+        session_store[conv_id]['title'] = new_title
+    return jsonify({'ok': ok})
+
+
+@app.route('/api/conversations/<conv_id>/delete', methods=['POST'])
+@login_required
+def delete_conv(conv_id):
+    patient_id = session.get('patient_id')
+    ok = delete_conversation(conv_id, patient_id)
+    if conv_id in session_store:
+        del session_store[conv_id]
+    if session.get('user_id') == conv_id:
+        session.pop('user_id', None)
+    return jsonify({'ok': ok})
+
+
+@app.route('/api/conversations/new', methods=['POST'])
+@login_required
+def new_conversation():
+    session.pop('user_id', None)
+    state = get_agent_session()
+    uid = session['user_id']
+    return jsonify({'session_id': uid, 'message': 'New conversation started'})

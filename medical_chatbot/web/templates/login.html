@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>MedBot — Patient Access</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      background: #0d1117;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: #e6edf3;
+    }
+    .card {
+      width: 100%;
+      max-width: 440px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 40px 36px 36px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #238636, #2ea043);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .logo-text { font-size: 20px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+    .logo-text span { color: #2ea043; }
+    .tabs {
+      display: flex; background: #0d1117; border: 1px solid #30363d;
+      border-radius: 8px; padding: 4px; margin-bottom: 28px; gap: 4px;
+    }
+    .tab {
+      flex: 1; padding: 8px; text-align: center; font-size: 14px; font-weight: 500;
+      color: #8b949e; cursor: pointer; border-radius: 6px; border: none;
+      background: transparent; transition: all 0.15s;
+    }
+    .tab.active { background: #21262d; color: #e6edf3; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    .form { display: none; }
+    .form.active { display: block; }
+    .form-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; color: #e6edf3; }
+    .form-subtitle { font-size: 13px; color: #8b949e; margin-bottom: 22px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 500; color: #c9d1d9; margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 9px 12px; background: #0d1117;
+      border: 1px solid #30363d; border-radius: 6px; color: #e6edf3;
+      font-size: 14px; outline: none; transition: border-color 0.15s;
+    }
+    input:focus { border-color: #2ea043; box-shadow: 0 0 0 3px rgba(46,160,67,0.15); }
+    input::placeholder { color: #484f58; }
+    .btn {
+      width: 100%; padding: 10px; background: #238636; color: #fff;
+      border: none; border-radius: 6px; font-size: 14px; font-weight: 600;
+      cursor: pointer; margin-top: 6px; transition: background 0.15s;
+    }
+    .btn:hover { background: #2ea043; }
+    .alert { padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 18px; display: none; }
+    .alert.error { background: rgba(218,54,51,0.15); border: 1px solid rgba(218,54,51,0.4); color: #f85149; display: block; }
+    .alert.success { background: rgba(46,160,67,0.15); border: 1px solid rgba(46,160,67,0.4); color: #3fb950; display: block; }
+    .footer-note { text-align: center; font-size: 12px; color: #484f58; margin-top: 20px; }
+    .footer-note span { color: #2ea043; cursor: pointer; text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">🏥</div>
+    <div class="logo-text">Med<span>Bot</span></div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('login')">Sign In</button>
+    <button class="tab" onclick="switchTab('register')">Create Account</button>
+  </div>
+  {% if error %}
+    <div class="alert error">{{ error }}</div>
+  {% endif %}
+  {% if success %}
+    <div class="alert success">{{ success }}</div>
+  {% endif %}
+  <div class="form active" id="form-login">
+    <div class="form-title">Welcome back</div>
+    <div class="form-subtitle">Sign in with your username and password</div>
+    <form method="POST" action="/login" autocomplete="off">
+      <div class="field">
+        <label for="login-username">Username</label>
+        <input id="login-username" name="username" type="text" placeholder="Enter your username" autocomplete="off" required/>
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input id="login-password" name="password" type="password" placeholder="Enter your password" autocomplete="off" required/>
+      </div>
+      <button type="submit" class="btn">Sign In</button>
+    </form>
+    <div class="footer-note">First time here? <span onclick="switchTab('register')">Create an account</span></div>
+  </div>
+  <div class="form" id="form-register">
+    <div class="form-title">Create your account</div>
+    <div class="form-subtitle">Fill in your details to get started</div>
+    <form method="POST" action="/register" autocomplete="off">
+      <div class="field">
+        <label for="reg-name">Full Name</label>
+        <input id="reg-name" name="full_name" type="text" placeholder="Ahmed Mohamed" required/>
+      </div>
+      <div class="field">
+        <label for="reg-username">Username</label>
+        <input id="reg-username" name="username" type="text" placeholder="Choose a username" required/>
+      </div>
+      <div class="field">
+        <label for="reg-national-id">National ID</label>
+        <input id="reg-national-id" name="national_id" type="text" placeholder="14-digit national ID" maxlength="14" required/>
+      </div>
+      <div class="field">
+        <label for="reg-password">Password</label>
+        <input id="reg-password" name="password" type="password" placeholder="Choose a strong password" required/>
+      </div>
+      <div class="field">
+        <label for="reg-confirm">Confirm Password</label>
+        <input id="reg-confirm" name="confirm_password" type="password" placeholder="Repeat your password" required/>
+      </div>
+      <button type="submit" class="btn">Create Account</button>
+    </form>
+    <div class="footer-note">Already have an account? <span onclick="switchTab('login')">Sign in</span></div>
+  </div>
+</div>
+<script>
+  function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+    });
+    document.getElementById('form-login').classList.toggle('active', tab === 'login');
+    document.getElementById('form-register').classList.toggle('active', tab === 'register');
+  }
+  {% if active_tab == 'register' %}switchTab('register');{% endif %}
+</script>
+</body>
+</html>

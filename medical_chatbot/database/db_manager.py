@@ -46,9 +46,20 @@ def init_db():
             risk_level      TEXT DEFAULT 'Unknown',
             mode            TEXT DEFAULT 'patient',
             context_json    JSONB,
-            is_active       BOOLEAN DEFAULT TRUE
+            is_active       BOOLEAN DEFAULT TRUE,
+            patient_id      INTEGER REFERENCES patients(patient_id) ON DELETE CASCADE,
+            title           TEXT DEFAULT 'New Conversation'
         )
     """)
+
+    for col_sql in [
+        "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS patient_id INTEGER REFERENCES patients(patient_id) ON DELETE CASCADE",
+        "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'New Conversation'",
+    ]:
+        try:
+            cursor.execute(col_sql)
+        except Exception:
+            pass
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS messages (
@@ -116,6 +127,17 @@ def init_db():
     cursor.execute("""
         CREATE INDEX IF NOT EXISTS idx_symptoms_session
         ON symptoms(session_id)
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            patient_id      SERIAL PRIMARY KEY,
+            full_name       TEXT NOT NULL,
+            username        TEXT NOT NULL UNIQUE,
+            national_id     TEXT NOT NULL UNIQUE,
+            password_hash   TEXT NOT NULL,
+            created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+        )
     """)
 
     conn.commit()
@@ -239,10 +261,17 @@ def get_messages(session_id):
 # SYMPTOM OPERATIONS
 # ══════════════════════════════════════════════════════════════════════
 
-def save_symptoms(session_id, symptoms_list, severity=None):
-    """Saves new symptoms — avoids duplicates."""
+def save_symptoms(session_id, symptoms_list, severity=None, normalized_map=None):
+    """Saves new symptoms — avoids duplicates.
+
+    normalized_map: dict {raw_term: normalized_term} from SapBERT output.
+    If a raw term has no entry the normalized_term column is left NULL.
+    """
     if not symptoms_list:
         return
+
+    if normalized_map is None:
+        normalized_map = {}
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -256,10 +285,11 @@ def save_symptoms(session_id, symptoms_list, severity=None):
 
     for symptom in symptoms_list:
         if symptom and symptom not in existing:
+            norm = normalized_map.get(symptom)
             cursor.execute("""
-                INSERT INTO symptoms (session_id, raw_term, severity)
-                VALUES (%s, %s, %s)
-            """, (session_id, symptom, severity))
+                INSERT INTO symptoms (session_id, raw_term, normalized_term, severity)
+                VALUES (%s, %s, %s, %s)
+            """, (session_id, symptom, norm, severity))
             existing.add(symptom)
 
     conn.commit()
@@ -385,3 +415,88 @@ def get_stats():
         "lung_sessions": lung,
         "high_risk_sessions": high_risk
     }
+
+def register_patient(full_name, username, national_id, password_hash):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO patients (full_name, username, national_id, password_hash) VALUES (%s, %s, %s, %s)",
+            (full_name, username, national_id, password_hash)
+        )
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+
+
+def get_patient_by_username(username):
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM patients WHERE username = %s", (username,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def get_conversations(patient_id):
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        'SELECT session_id, title, created_at, updated_at, medical_context, risk_level FROM sessions WHERE patient_id = %s AND is_active = TRUE ORDER BY updated_at DESC',
+        (patient_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_conversation_messages(session_id, patient_id):
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute('SELECT session_id FROM sessions WHERE session_id = %s AND patient_id = %s', (session_id, patient_id))
+    if not cursor.fetchone():
+        conn.close()
+        return None
+    cursor.execute('SELECT role, content, mode, timestamp FROM messages WHERE session_id = %s ORDER BY timestamp ASC', (session_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def rename_conversation(session_id, patient_id, new_title):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE sessions SET title = %s WHERE session_id = %s AND patient_id = %s', (new_title.strip()[:80], session_id, patient_id))
+    updated = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return updated > 0
+
+
+def delete_conversation(session_id, patient_id):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE sessions SET is_active = FALSE WHERE session_id = %s AND patient_id = %s', (session_id, patient_id))
+    updated = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return updated > 0
+
+
+def link_session_to_patient(session_id, patient_id, title='New Conversation'):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE sessions SET patient_id = %s, title = %s, updated_at = NOW() WHERE session_id = %s AND (patient_id IS NULL OR patient_id = %s)', (patient_id, title, session_id, patient_id))
+    conn.commit()
+    conn.close()
+
+
+def update_conversation_title(session_id, title):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE sessions SET title = %s, updated_at = NOW() WHERE session_id = %s AND (title = 'New Conversation' OR title IS NULL)", (title[:80], session_id))
+    conn.commit()
+    conn.close()
