@@ -1,4 +1,4 @@
-# MedBot — Medical AI System
+# MedLink — Medical AI System
 
 ## Requirements
 - Python 3.9+
