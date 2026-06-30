@@ -4,7 +4,8 @@ import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, session, send_from_directory, redirect, url_for
 from functools import wraps
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import generate_password_hash as _gen_hash, check_password_hash
+def generate_password_hash(p): return _gen_hash(p, method="pbkdf2:sha256")
 from medical_chatbot.followup.routes import followup_bp
 from medical_chatbot.database.db_manager import (
     init_db, save_session, save_message, save_symptoms,
@@ -169,7 +170,8 @@ def chat():
                 context_dict=session_obj.context,
                 medical_context=session_obj.context.get("medical_context"),
                 risk_level=session_obj.context.get("risk_level"),
-                mode=state["mode"])
+                mode=state["mode"],
+                patient_id=session.get('patient_id'))
             save_message(uid, "patient", user_input)
             if _db_available and session.get('patient_id'):
                 try:
@@ -382,20 +384,35 @@ def get_doctor_report(uid):
     for r in fu_reminders:
         print(f"  → type={r['type']} title={r['title']} link={r.get('link')} scan={r.get('attached_upload')} status={r['status']}")
 
-    # Resolve scan filenames from upload store
-    def _get_upload_filename(upload_id):
+    # Resolve scan filenames + AI prediction from upload store
+    # Use medical_context from conversation to determine the correct model
+    medical_context = ctx.get("medical_context", "brain") or "brain"
+    if medical_context not in ["brain", "lung", "skin"]:
+        medical_context = "brain"
+
+    def _get_upload_info(upload_id):
         for u in followup_store.get_uploads(uid):
             if u["id"] == upload_id:
-                return u["filename"]
-        return None
+                # Run inference now if not already done, using conversation context
+                if u.get("prediction") is None and u.get("file_type") != "lab_report":
+                    followup_store.evaluate_upload(uid, upload_id, model_type=medical_context)
+                return {
+                    "filename": u["filename"],
+                    "prediction": u.get("prediction"),
+                    "confidence": u.get("confidence"),
+                    "model_type": u.get("model_type"),
+                }
+        return {"filename": None, "prediction": None, "confidence": None, "model_type": None}
 
     followup_results = {
         "lab_links":    [{"title": r["title"], "link": r["link"], "status": r["status"]}
                          for r in fu_reminders if r.get("type") == "lab" and r.get("link")],
-        "scan_uploads": [{"title": r["title"], "date": r["date_time"],
+        "scan_uploads": [{
+                          "title": r["title"], "date": r["date_time"],
                           "upload_id": r.get("attached_upload"),
-                          "filename": _get_upload_filename(r.get("attached_upload")),
-                          "status": r["status"]}
+                          "status": r["status"],
+                          **_get_upload_info(r.get("attached_upload"))
+                         }
                          for r in fu_reminders if r.get("type") == "scan" and r.get("attached_upload")],
         "completed":    bool(fu_reminders) and all(r["status"] == "done" for r in fu_reminders)
     }

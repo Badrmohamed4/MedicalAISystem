@@ -150,8 +150,10 @@ def init_db():
 # ══════════════════════════════════════════════════════════════════════
 
 def save_session(session_id, context_dict, medical_context=None,
-                 risk_level=None, mode="patient"):
-    """Saves or updates a session."""
+                 risk_level=None, mode="patient", patient_id=None):
+    """Saves or updates a session. Also links patient_id if provided,
+    so the conversation is always discoverable for that patient even if
+    the row didn't exist yet at login time."""
     now = datetime.now()
     context_json = json.dumps(context_dict)
 
@@ -165,24 +167,35 @@ def save_session(session_id, context_dict, medical_context=None,
     existing = cursor.fetchone()
 
     if existing:
-        cursor.execute("""
-            UPDATE sessions
-            SET updated_at = %s, medical_context = %s,
-                risk_level = %s, mode = %s, context_json = %s
-            WHERE session_id = %s
-        """, (now, medical_context or 'none',
-              risk_level or 'Unknown', mode,
-              context_json, session_id))
+        if patient_id:
+            cursor.execute("""
+                UPDATE sessions
+                SET updated_at = %s, medical_context = %s,
+                    risk_level = %s, mode = %s, context_json = %s,
+                    patient_id = %s
+                WHERE session_id = %s
+            """, (now, medical_context or 'none',
+                  risk_level or 'Unknown', mode,
+                  context_json, patient_id, session_id))
+        else:
+            cursor.execute("""
+                UPDATE sessions
+                SET updated_at = %s, medical_context = %s,
+                    risk_level = %s, mode = %s, context_json = %s
+                WHERE session_id = %s
+            """, (now, medical_context or 'none',
+                  risk_level or 'Unknown', mode,
+                  context_json, session_id))
     else:
         cursor.execute("""
             INSERT INTO sessions
                 (session_id, created_at, updated_at,
-                 medical_context, risk_level, mode, context_json)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 medical_context, risk_level, mode, context_json, patient_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (session_id, now, now,
               medical_context or 'none',
               risk_level or 'Unknown',
-              mode, context_json))
+              mode, context_json, patient_id))
 
     conn.commit()
     conn.close()

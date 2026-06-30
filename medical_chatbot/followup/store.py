@@ -43,7 +43,6 @@ def get_all_patients_reminders():
     """Summary of every patient for the overview page."""
     result = []
     for pid, reminders in _reminders.items():
-        # re-run overdue check
         now_str = time.strftime("%Y-%m-%dT%H:%M")
         for r in reminders:
             if r["status"] == "pending" and r.get("date_time") and r["date_time"] < now_str:
@@ -95,6 +94,9 @@ def add_upload(patient_id, filename, filepath, file_type, original_name):
         "file_type": file_type,
         "original_name": original_name,
         "evaluation": None,
+        "prediction": None,
+        "confidence": None,
+        "model_type": None,
         "sent_to_doctor": False,
         "uploaded_at": time.time()
     }
@@ -106,16 +108,39 @@ def get_uploads(patient_id):
     return _uploads.get(patient_id, [])
 
 
-def evaluate_upload(patient_id, upload_id):
+def evaluate_upload(patient_id, upload_id, model_type=None):
     for u in _uploads.get(patient_id, []):
         if u["id"] == upload_id:
-            name = u["original_name"].lower()
             if u["file_type"] == "lab_report":
                 u["evaluation"] = "Needs follow-up"
-            elif any(w in name for w in ["normal", "healthy", "clear", "negative"]):
-                u["evaluation"] = "Good"
-            else:
+                u["prediction"] = None
+                u["confidence"] = None
+                u["model_type"] = None
+                return u["evaluation"]
+
+            # Run AI model inference using the model type from the patient conversation
+            try:
+                from medical_chatbot.utils.image_processor import ModelWrapper
+
+                # model_type must come from the conversation context (brain/lung/skin)
+                # fallback to brain if not provided
+                resolved_type = model_type if model_type in ["brain", "lung", "skin"] else "brain"
+
+                wrapper = ModelWrapper()
+                label, conf = wrapper.predict(u["filepath"], model_type=resolved_type)
+
+                u["prediction"] = label
+                u["confidence"] = round(float(conf) * 100, 1)
+                u["model_type"] = resolved_type
+                u["evaluation"] = "Good" if any(w in label.lower() for w in ["normal", "no tumor"]) else "Needs follow-up"
+
+            except Exception as e:
+                print(f"[Store] Model inference error: {e}")
+                u["prediction"] = "Error running model"
+                u["confidence"] = None
+                u["model_type"] = model_type
                 u["evaluation"] = "Needs follow-up"
+
             return u["evaluation"]
     return None
 
@@ -138,6 +163,9 @@ def send_to_doctor(patient_id, upload_id):
         "file_name": target["original_name"],
         "file_type": target["file_type"],
         "evaluation": target["evaluation"],
+        "prediction": target.get("prediction"),
+        "confidence": target.get("confidence"),
+        "model_type": target.get("model_type"),
         "status": "Sent to Doctor",
         "created_at": time.time()
     }

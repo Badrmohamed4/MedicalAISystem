@@ -153,19 +153,19 @@ class DecisionEngine:
         # Formulate Recommendation
         if risk == "High":
              msg = "⚠️ **Health Analysis**: Based on your symptoms (" + ", ".join(reasons) + "), this looks suspicious.\n"
-             msg += "**Recommendation**: It is highly recommended to get an MRI scan to rule out any underlying causes. Please seek professional medical help."
+             msg += "**Recommendation**: Please seek professional medical help as soon as possible."
         elif risk == "Medium":
              msg = "**Health Analysis**: Your symptoms explain some concern (" + ", ".join(reasons) + ").\n"
-             msg += "**Recommendation**: An MRI scan would be beneficial to be sure. In the meantime, monitor your condition closely."
+             msg += "**Recommendation**: Monitor your condition closely and consult a doctor if symptoms worsen."
         else:
              msg = "**Health Analysis**: Your symptoms appear mild at this stage.\n"
-             msg += "**Recommendation**: You can try some home care (rest/hydration). If symptoms persist or worsen, please consult a doctor or upload an MRI scan."
+             msg += "**Recommendation**: You can try some home care (rest/hydration). If symptoms persist or worsen, please consult a doctor."
 
         return risk, msg
 
     def get_diagnosis_message(self, session):
         if not session.context["tumor_class"]:
-            return "No diagnosis available yet. Please upload an MRI scan."
+            return "No diagnosis available yet. Please complete your symptom assessment first."
         
         tumor = session.context["tumor_class"]
         conf = session.context["tumor_confidence"]

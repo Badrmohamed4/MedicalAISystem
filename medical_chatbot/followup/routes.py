@@ -108,9 +108,43 @@ def upload_scan_for_reminder(rid):
     if r is None:
         return jsonify({"error": "Reminder not found"}), 404
 
-    # Auto-mark done + evaluate + send to doctor
+    # Get medical_context from the patient's most recent chat conversation (DB)
+    # to pick the right AI model. pid is the chat-session UUID; the DB indexes
+    # conversations by the LOGGED-IN patient_id, so we must use that instead.
+    model_type = "brain"  # default
+    logged_in_patient_id = session.get("patient_id")
+    print(f"[Routes][DEBUG] form pid={pid} | session.patient_id={logged_in_patient_id}")
+    try:
+        from medical_chatbot.database.db_manager import get_conversations
+        if logged_in_patient_id:
+            conversations = get_conversations(logged_in_patient_id)
+            print(f"[Routes][DEBUG] conversations found: {len(conversations)}")
+            for conv in conversations:  # already ordered by most recently updated
+                print(f"[Routes][DEBUG]   session={conv.get('session_id')} medical_context={conv.get('medical_context')}")
+            for conv in conversations:
+                ctx_model = (conv.get("medical_context") or "").lower()
+                if ctx_model in ["brain", "lung", "skin"]:
+                    model_type = ctx_model
+                    break
+        else:
+            print("[Routes][DEBUG] No logged_in_patient_id in Flask session!")
+    except Exception as e:
+        print(f"[Routes] Could not get medical_context from DB: {e}")
+        # Fallback: try in-memory session_store (works if pid happens to match a session uid)
+        try:
+            from medical_chatbot.web_app import session_store
+            patient_session = session_store.get(pid)
+            if patient_session:
+                ctx_model = patient_session["session"].context.get("medical_context", "brain")
+                if ctx_model in ["brain", "lung", "skin"]:
+                    model_type = ctx_model
+        except Exception as e2:
+            print(f"[Routes] Fallback also failed: {e2}")
+    print(f"[Routes][DEBUG] Final model_type chosen = {model_type}")
+
+    # Auto-mark done + evaluate with correct model + send to doctor
     store.mark_reminder_done(pid, rid)
-    store.evaluate_upload(pid, upload["id"])
+    store.evaluate_upload(pid, upload["id"], model_type=model_type)
     report = store.send_to_doctor(pid, upload["id"])
 
     return jsonify({"reminder": r, "upload": upload, "report": report})

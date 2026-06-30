@@ -1,6 +1,5 @@
 const chatHistory = document.getElementById('chat-history');
 const userInput = document.getElementById('user-input');
-const imageUpload = document.getElementById('image-upload');
 let currentMode = 'patient'; // Track current mode
 
 // Load chat history on page load
@@ -34,12 +33,6 @@ document.addEventListener('DOMContentLoaded', loadHistory);
 userInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') {
         sendMessage();
-    }
-});
-
-imageUpload.addEventListener('change', function (e) {
-    if (this.files && this.files[0]) {
-        uploadImage(this.files[0]);
     }
 });
 

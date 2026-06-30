@@ -393,7 +393,7 @@ class PatientAgent:
             response = (
                 "Hello! I'm your Medical AI Assistant. "
                 "I can help analyze brain, lung, and skin conditions. "
-                "Please describe your symptoms or upload a medical scan."
+                "Please describe your symptoms."
             )
 
         elif intent == "describe_symptoms":
@@ -421,7 +421,7 @@ class PatientAgent:
                 response = self._ask_with_ollama(text)
 
         elif intent == "upload_image":
-            response = "Please use the 📷 upload button to share your medical scan."
+            response = "Scan uploads are available in the Follow-Up section."
 
         elif intent == "ask_diagnosis":
             response = self.decision_engine.get_diagnosis_message(self.session)
@@ -708,7 +708,6 @@ class PatientAgent:
         response += f"**Risk level**: {risk}\n\n"
         response += risk_msg
         response += rag_note
-        response += "\n\nFor a more accurate diagnosis, please upload a medical scan using the 📷 button."
 
         return response
 

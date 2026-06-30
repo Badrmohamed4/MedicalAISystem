@@ -99,6 +99,15 @@ class SapBERTMedicalRAG:
         self.embeddings = self._model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
         print("[RAG] ✅ Embeddings ready.")
 
+    def _shorten(self, text: str, max_sentences: int = 2, max_chars: int = 280) -> str:
+        """Trim a retrieved document down to 1-2 sentences / a char cap, for display."""
+        import re
+        sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+        short = " ".join(sentences[:max_sentences]).strip()
+        if len(short) > max_chars:
+            short = short[:max_chars].rsplit(" ", 1)[0].rstrip(".,;: ") + "..."
+        return short
+
     def retrieve(self, query: str, domain_filter: str = None) -> str:
         """
         Retrieve top-k relevant documents.
@@ -137,8 +146,8 @@ class SapBERTMedicalRAG:
          if similarities[idx] >= self.similarity_threshold:
              doc = self.documents[idx]
              source = doc.get("source", "MEDICAL_KB")
-             text = doc["text"]
-             retrieved.append(f"[{source}] {text}")
+             text = self._shorten(doc["text"])
+             retrieved.append(f"• **[{source}]** {text}")
 
      # ── NO-MATCH FALLBACK ──
      if not retrieved:
@@ -176,8 +185,8 @@ class SapBERTMedicalRAG:
         for idx, score in sorted_docs:
             doc = self.documents[idx]
             source = doc.get("source", "MEDICAL_KB")
-            text = doc["text"]
-            retrieved.append(f"[{source}] {text}")
+            text = self._shorten(doc["text"])
+            retrieved.append(f"• **[{source}]** {text}")
 
         return "\n\n".join(retrieved) if retrieved else ""
 
