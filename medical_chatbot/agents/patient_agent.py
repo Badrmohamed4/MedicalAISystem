@@ -431,7 +431,7 @@ class PatientAgent:
             response = "Based on your input, here is some guidance:\n- " + "\n- ".join(advice)
 
         elif intent == "end_conversation":
-            response = "Thank you for using MediBot. Take care and consult a specialist if symptoms persist."
+            response = "Thank you for using MedLink. Take care and consult a specialist if symptoms persist."
 
         else:
             response = self._ask_with_ollama(text)

@@ -5,7 +5,7 @@ MAX_INPUT_LENGTH = 500
 
 # Patterns that indicate prompt injection attempts
 INJECTION_PATTERNS = [
-    r"ignore\s+(previous|above|all)\s+instructions",
+    r"ignore\s+(previous|above|all)\s+(instructions|information|context|rules|prompts?|data)",
     r"you\s+are\s+now\s+a",
     r"forget\s+(everything|all|your|previous)",
     r"new\s+instructions?\s*:",
@@ -20,8 +20,12 @@ INJECTION_PATTERNS = [
     r"<\s*script",         # XSS attempt
     r";\s*drop\s+table",   # SQL injection attempt
     r"\{\{.*\}\}",         # Template injection
+    r"(reveal|show|print|dump|repeat)\s+(me\s+)?(your|the)\s+(system\s*prompt|instructions?|architecture|configuration|developer\s+prompt|hidden\s+instructions?)",
+    r"what\s+(model|llm)\s+(are\s+you|do\s+you)\s+(using|use|run(ning)?)\s*(internally)?",
+    r"tell\s+me\s+your\s+(architecture|internal\s+(configuration|config)|system\s*prompt)",
+    r"repeat\s+everything\s+above",
+    r"internal\s+(configuration|config|architecture)",
 ]
-
 # Words that are suspicious in a medical chatbot context
 SUSPICIOUS_PHRASES = [
     "give me the source code",
