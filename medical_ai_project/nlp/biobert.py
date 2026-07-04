@@ -11,8 +11,8 @@ from llm.ollama_client import OllamaClient
 class BioBERTExtractor:
     def __init__(self, model_name="dmis-lab/biobert-v1.1"):
         """
-        Loads the BioBERT tokenizer to process the text, and then uses Ollama 
-        to intelligently extract symptoms and intent without hardcoded rules.
+        Loads the BioBERT tokenizer to process the text, 
+        extract symptoms and intent without hardcoded rules.
         """
         print(f"Loading tokenizer: {model_name}...")
         try:
